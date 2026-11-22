@@ -1,0 +1,7 @@
+Hi,
+
+Good news — {{ brand }} order {{ order.reference }} is on its way.
+
+{% if tracking %}Tracking: {{ tracking }}{% endif %}
+
+— {{ brand }}

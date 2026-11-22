@@ -1,0 +1,15 @@
+Hi,
+
+Your {{ brand }} order {{ order.reference }} is confirmed.
+
+Total: {{ currency }} {{ grand_total }}
+Status: {{ order.status }}
+Ship to: {{ order.shipping_address_text }}
+
+Items:
+{% for item in items %}- {{ item.product_name_snapshot }} × {{ item.quantity }} ({{ item.sku_snapshot }})
+{% endfor %}
+
+We'll email you again when it ships.
+
+— {{ brand }}

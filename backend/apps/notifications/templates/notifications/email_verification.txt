@@ -1,0 +1,11 @@
+Hi{% if user.username %} {{ user.username }}{% endif %},
+
+Welcome to {{ brand }}. Please verify your email so you can place orders.
+
+Verification code/token: {{ token }}
+
+Or open: {{ link }}
+
+This link expires in 24 hours and can only be used once.
+
+— {{ brand }}

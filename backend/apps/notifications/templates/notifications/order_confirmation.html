@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;background:#F3F4EF;color:#101512;padding:24px">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #D8DCD3">
+    <h1 style="font-size:20px;margin:0 0 8px">Order confirmed</h1>
+    <p style="font-family:ui-monospace,monospace;color:#0E2A22;font-weight:600">{{ order.reference }}</p>
+    <p style="color:#6E7B72">Total <strong style="color:#101512">{{ currency }} {{ grand_total }}</strong></p>
+    <p style="color:#6E7B72;font-size:14px">Deliver to: {{ order.shipping_address_text }}</p>
+    <hr style="border:none;border-top:1px solid #D8DCD3;margin:16px 0">
+    <ul style="padding-left:18px;color:#3D4A42;font-size:14px;line-height:1.6">
+    {% for item in items %}
+      <li>{{ item.product_name_snapshot }} × {{ item.quantity }}</li>
+    {% endfor %}
+    </ul>
+    <p style="font-size:12px;color:#6E7B72;margin-top:18px">— {{ brand }}</p>
+  </div>
+</body></html>

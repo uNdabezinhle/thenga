@@ -1,0 +1,11 @@
+Hi,
+
+A refund has been processed for {{ brand }} order {{ order.reference }}.
+
+Refund amount: {{ currency }} {{ refund_amount }}
+{% if reason %}Reason: {{ reason }}{% endif %}
+Reference: {{ provider_reference }}
+
+Funds typically return to the original payment method within a few business days.
+
+— {{ brand }}

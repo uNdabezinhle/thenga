@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Northbound — Flutter client prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --forest:#0E2A22; --forest-2:#16362B; --forest-3:#1F4839;
+  --lime:#C8F751; --lime-dim:#9FC93E;
+  --paper:#F3F4EF; --paper-2:#E7E9E1; --card:#FFFFFF;
+  --ink:#101512; --mute:#6E7B72; --hair:#D8DCD3;
+  --con-bg:#0A0F0D; --con-panel:#101715; --con-line:#1E2A25; --con-text:#A9B8B0;
+  --get:#8FB8FF; --post:#C8F751; --del:#FF7A5C; --patch:#FFC960;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--forest);
+  color:var(--paper);
+  font-family:'Public Sans',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--lime);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- shell ---------- */
+.shell{min-height:100vh;display:flex;flex-direction:column}
+.topbar{
+  display:flex;align-items:center;gap:18px;padding:14px 22px;
+  border-bottom:1px solid rgba(255,255,255,.08);flex-wrap:wrap;
+}
+.wordmark{font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;letter-spacing:.18em;text-transform:uppercase}
+.wordmark span{color:var(--lime)}
+.topbar .sep{width:1px;height:18px;background:rgba(255,255,255,.14)}
+.tagline{font-size:12.5px;color:#8FA396;letter-spacing:.01em}
+.topbar .spacer{flex:1}
+.pill{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  padding:6px 11px;border:1px solid rgba(255,255,255,.16);border-radius:999px;color:#B9CBC0;
+}
+.pill.on{border-color:var(--lime);color:var(--lime)}
+
+.stage{flex:1;display:grid;grid-template-columns:1fr 420px;gap:0}
+.left{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:34px 20px 60px;position:relative;min-width:0}
+.hint{font-size:12.5px;color:#7E9488;text-align:center;margin-top:20px;max-width:340px;line-height:1.55}
+.hint b{color:var(--lime);font-weight:600}
+
+/* ---------- phone ---------- */
+.phone{
+  width:390px;height:812px;background:var(--paper);border-radius:42px;
+  border:9px solid #05100C;box-shadow:0 40px 90px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06);
+  display:flex;flex-direction:column;overflow:hidden;position:relative;flex:none;
+}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:118px;height:26px;background:#05100C;border-radius:0 0 16px 16px;z-index:40}
+.statusbar{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 24px;
+  font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink);font-weight:500;z-index:41}
+.statusbar .rt{display:flex;gap:5px;align-items:center;opacity:.8}
+.viewport{flex:1;overflow-y:auto;overflow-x:hidden;position:relative;scrollbar-width:thin}
+.viewport::-webkit-scrollbar{width:0}
+.screen{animation:slide .26s cubic-bezier(.2,.8,.3,1) both}
+@keyframes slide{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* ---------- app chrome ---------- */
+.appbar{position:sticky;top:0;z-index:20;background:var(--paper);padding:6px 16px 12px;display:flex;align-items:center;gap:10px}
+.appbar h1{font-family:'Archivo',sans-serif;font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--ink);line-height:1.1}
+.appbar .sub{font-size:12px;color:var(--mute)}
+.iconbtn{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--ink);flex:none}
+.iconbtn:hover{background:var(--paper-2)}
+.badge{position:absolute;top:2px;right:2px;min-width:16px;height:16px;border-radius:999px;background:var(--forest);color:var(--lime);
+  font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:600;display:grid;place-items:center;padding:0 4px}
+.body{padding:0 16px 26px;color:var(--ink)}
+
+.bottomnav{flex:none;height:64px;background:#fff;border-top:1px solid var(--hair);display:flex;align-items:stretch;position:relative;z-index:30}
+.navitem{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8E998F;position:relative}
+.navitem span{font-size:10px;letter-spacing:.02em}
+.navitem.active{color:var(--forest)}
+.navitem.active .navpill{position:absolute;top:8px;width:44px;height:28px;border-radius:999px;background:var(--lime);z-index:-1}
+
+/* ---------- components ---------- */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 14px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:8px 14px;border-radius:999px;border:1px solid var(--hair);background:#fff;font-size:12.5px;color:var(--ink);white-space:nowrap}
+.chip.on{background:var(--forest);color:var(--lime);border-color:var(--forest);font-weight:500}
+
+.searchfield{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--hair);border-radius:999px;padding:11px 15px;margin-bottom:14px}
+.searchfield input{border:none;outline:none;flex:1;font:inherit;font-size:14px;color:var(--ink);background:none}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pcard{background:#fff;border:1px solid var(--hair);border-radius:var(--r);overflow:hidden;text-align:left;display:flex;flex-direction:column;transition:transform .16s,box-shadow .16s}
+.pcard:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(14,42,34,.1)}
+.pcard .art{aspect-ratio:1/1;position:relative;overflow:hidden}
+.pcard .meta{padding:9px 11px 12px}
+.pcard .nm{font-size:13px;font-weight:600;line-height:1.3;color:var(--ink)}
+.pcard .br{font-size:10.5px;color:var(--mute);letter-spacing:.04em;text-transform:uppercase;margin-bottom:3px}
+.pcard .pr{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;margin-top:6px;color:var(--forest)}
+.tagsold{position:absolute;top:8px;left:8px;background:var(--ink);color:#fff;font-size:9.5px;letter-spacing:.08em;
+  text-transform:uppercase;padding:4px 7px;border-radius:5px;font-weight:600}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;border-radius:12px;
+  background:var(--forest);color:var(--lime);font-weight:600;font-size:14.5px;transition:filter .15s}
+.btn:hover{filter:brightness(1.18)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--forest);border:1.5px solid var(--hair)}
+.btn.lime{background:var(--lime);color:var(--forest)}
+.btn.sm{padding:10px 14px;font-size:13px;width:auto}
+
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);margin-bottom:6px;font-weight:600}
+.field input{width:100%;padding:13px 14px;border:1px solid var(--hair);border-radius:11px;font:inherit;font-size:14px;background:#fff;color:var(--ink);outline:none}
+.field input:focus{border-color:var(--forest)}
+.err{background:#FDECE7;border:1px solid #F5C4B6;color:#9B3B1E;font-size:12.5px;padding:10px 12px;border-radius:10px;margin-bottom:12px;line-height:1.45}
+
+.row{display:flex;align-items:center;gap:12px}
+.between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mono{font-family:'IBM Plex Mono',monospace}
+.h2{font-family:'Archivo',sans-serif;font-size:15px;font-weight:700;letter-spacing:-.01em;margin:20px 0 10px;color:var(--ink)}
+.muted{color:var(--mute);font-size:12.5px;line-height:1.55}
+.card{background:#fff;border:1px solid var(--hair);border-radius:var(--r);padding:14px}
+.hr{height:1px;background:var(--hair);margin:14px 0}
+
+.varbtn{padding:9px 13px;border:1.5px solid var(--hair);border-radius:10px;background:#fff;font-size:12.5px;color:var(--ink)}
+.varbtn.on{border-color:var(--forest);background:var(--forest);color:var(--lime);font-weight:600}
+.varbtn:disabled{opacity:.35;text-decoration:line-through;cursor:not-allowed}
+
+.citem{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--hair)}
+.citem .thumb{width:66px;height:66px;border-radius:10px;overflow:hidden;flex:none;border:1px solid var(--hair)}
+.stepper{display:flex;align-items:center;border:1px solid var(--hair);border-radius:9px;overflow:hidden}
+.stepper button{width:28px;height:28px;display:grid;place-items:center;color:var(--ink)}
+.stepper button:hover{background:var(--paper-2)}
+.stepper .q{width:30px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600}
+.linkbtn{font-size:11.5px;color:var(--mute);text-decoration:underline;text-underline-offset:2px}
+.linkbtn:hover{color:var(--forest)}
+
+.totals{font-family:'IBM Plex Mono',monospace;font-size:13px}
+.totals .ln{display:flex;justify-content:space-between;padding:5px 0;color:#3D4A42}
+.totals .ln.big{font-size:17px;font-weight:600;color:var(--ink);padding-top:11px;border-top:1px solid var(--hair);margin-top:6px}
+.totals .ln.disc{color:#2F7A4F}
+
+.ship{display:flex;align-items:center;gap:11px;padding:12px;border:1.5px solid var(--hair);border-radius:11px;background:#fff;width:100%;text-align:left;margin-bottom:8px}
+.ship.on{border-color:var(--forest);background:#F7FBEE}
+.radio{width:17px;height:17px;border-radius:50%;border:2px solid var(--hair);flex:none;display:grid;place-items:center}
+.ship.on .radio{border-color:var(--forest)}
+.ship.on .radio::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--forest)}
+
+.track{position:relative;padding-left:26px}
+.track .stp{position:relative;padding-bottom:20px}
+.track .stp::before{content:"";position:absolute;left:-26px;top:3px;width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid var(--hair);z-index:2}
+.track .stp::after{content:"";position:absolute;left:-20.5px;top:16px;width:2px;height:100%;background:var(--hair)}
+.track .stp:last-child::after{display:none}
+.track .stp.done::before{background:var(--lime);border-color:var(--forest)}
+.track .stp.done::after{background:var(--forest)}
+
+.snack{position:absolute;left:14px;right:14px;bottom:78px;background:var(--ink);color:#fff;padding:13px 15px;border-radius:11px;
+  font-size:13px;z-index:60;box-shadow:0 12px 30px rgba(0,0,0,.3);animation:pop .24s cubic-bezier(.2,.9,.3,1) both;display:flex;gap:10px;align-items:center}
+.snack .dot{width:7px;height:7px;border-radius:50%;background:var(--lime);flex:none}
+@keyframes pop{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+.spinner{width:17px;height:17px;border:2px solid rgba(200,247,81,.3);border-top-color:var(--lime);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:56px 20px;color:var(--mute)}
+.empty h3{font-family:'Archivo',sans-serif;font-size:17px;color:var(--ink);margin-bottom:6px;font-weight:700}
+
+/* ---------- console ---------- */
+.console{background:var(--con-bg);border-left:1px solid var(--con-line);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+.ctabs{display:flex;border-bottom:1px solid var(--con-line);flex:none}
+.ctab{flex:1;padding:14px 8px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#5D6E66}
+.ctab.on{color:var(--lime);box-shadow:inset 0 -2px 0 var(--lime)}
+.cbody{flex:1;overflow-y:auto;padding:14px}
+.cbody::-webkit-scrollbar{width:6px}.cbody::-webkit-scrollbar-thumb{background:var(--con-line);border-radius:3px}
+.ctitle{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#4E6058;margin:16px 0 8px}
+.ctitle:first-child{margin-top:0}
+
+.req{border:1px solid var(--con-line);border-radius:9px;margin-bottom:7px;overflow:hidden;background:var(--con-panel);animation:in .3s ease both}
+@keyframes in{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+.req .hd{display:flex;align-items:center;gap:9px;padding:9px 11px;font-family:'IBM Plex Mono',monospace;font-size:11px;width:100%;text-align:left}
+.req .m{font-weight:600;font-size:9.5px;letter-spacing:.06em;padding:2.5px 6px;border-radius:4px;flex:none}
+.m.GET{background:rgba(143,184,255,.14);color:var(--get)}
+.m.POST{background:rgba(200,247,81,.13);color:var(--post)}
+.m.DELETE{background:rgba(255,122,92,.14);color:var(--del)}
+.m.PATCH{background:rgba(255,201,96,.14);color:var(--patch)}
+.req .pt{flex:1;color:var(--con-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px}
+.req .st{font-size:10px;color:#4E6058;flex:none}
+.req .st.ok{color:#6FCF97}.req .st.bad{color:var(--del)}
+.req pre{padding:0 11px 11px;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1.65;color:#7E9188;
+  white-space:pre-wrap;word-break:break-word;border-top:1px solid var(--con-line);padding-top:9px;margin-top:0}
+.kvs{font-family:'IBM Plex Mono',monospace;font-size:10.5px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--con-line)}
+.kv .k{color:#4E6058;flex:none}
+.kv .v{color:var(--con-text);text-align:right;word-break:break-all}
+.kv .v.hi{color:var(--lime)}
+
+.flag{display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid var(--con-line);border-radius:9px;
+  background:var(--con-panel);margin-bottom:7px;width:100%;text-align:left}
+.flag .sw{width:32px;height:18px;border-radius:999px;background:#22302A;flex:none;position:relative;transition:background .18s;margin-top:1px}
+.flag .sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#5D6E66;transition:.18s}
+.flag.on .sw{background:rgba(200,247,81,.25)}
+.flag.on .sw::after{transform:translateX(14px);background:var(--lime)}
+.flag .tx{font-size:11.5px;color:var(--con-text);line-height:1.4}
+.flag .tx em{display:block;font-style:normal;font-size:10px;color:#4E6058;margin-top:3px;font-family:'IBM Plex Mono',monospace}
+
+.ep{display:flex;align-items:center;gap:9px;padding:6px 0;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#4E6058;line-height:1.4}
+.ep .tick{width:14px;height:14px;border-radius:4px;border:1px solid var(--con-line);flex:none;display:grid;place-items:center;font-size:9px}
+.ep.hit{color:var(--con-text)}
+.ep.hit .tick{background:var(--lime);border-color:var(--lime);color:var(--forest);font-weight:700}
+.ep.todo{opacity:.5}
+.ep.todo .tick{border-style:dashed}
+.covbar{height:4px;background:var(--con-line);border-radius:2px;overflow:hidden;margin:4px 0 14px}
+.covbar i{display:block;height:100%;background:var(--lime);transition:width .4s}
+.cnote{font-size:10.5px;color:#4E6058;line-height:1.6;font-family:'IBM Plex Mono',monospace;margin-top:12px}
+.clear{font-family:'IBM Plex Mono',monospace;font-size:10px;color:#4E6058;text-decoration:underline;text-underline-offset:2px}
+
+.mobiletoggle{display:none}
+@media (max-width:1080px){
+  .stage{grid-template-columns:1fr}
+  .console{height:auto;position:static;border-left:none;border-top:1px solid var(--con-line)}
+  .cbody{max-height:520px}
+  .left{padding:24px 12px 30px}
+}
+@media (max-width:430px){
+  .phone{width:100%;max-width:390px;height:720px;border-radius:32px;border-width:6px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="wordmark">North<span>bound</span></div>
+    <div class="sep"></div>
+    <div class="tagline">Flutter client prototype &mdash; wired to a simulated DRF backend</div>
+    <div class="spacer"></div>
+    <div class="pill" id="sessionpill">guest session</div>
+    <div class="pill" id="netpill">v1 &middot; 120ms</div>
+  </header>
+
+  <div class="stage">
+    <main class="left">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="rt"><svg width="14" height="10" viewBox="0 0 14 10" fill="currentColor"><rect x="0" y="6" width="2.5" height="4" rx="1"/><rect x="3.8" y="4" width="2.5" height="6" rx="1"/><rect x="7.6" y="2" width="2.5" height="8" rx="1"/><rect x="11.4" y="0" width="2.5" height="10" rx="1"/></svg>
+          <svg width="20" height="10" viewBox="0 0 20 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="15" height="8.8" rx="2.4"/><rect x="2.2" y="2.2" width="10" height="5.6" rx="1.2" fill="currentColor" stroke="none"/><path d="M17.4 3.4v3.2" stroke-linecap="round"/></svg></span>
+        </div>
+        <div class="viewport" id="viewport"></div>
+        <nav class="bottomnav" id="bottomnav"></nav>
+      </div>
+      <p class="hint">Tap through the app on the left. Every action fires a <b>real endpoint from your codebase</b> &mdash; watch the inspector record it.</p>
+    </main>
+
+    <aside class="console">
+      <div class="ctabs" id="ctabs"></div>
+      <div class="cbody" id="cbody"></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============ icons ============ */
+const I = (d, extra) => `<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICO = {
+  shop:  I('<path d="M4 9h16l-1 11H5L4 9Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/>'),
+  search:I('<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>'),
+  cart:  I('<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12h11L21 7H6"/>'),
+  saved: I('<path d="M6 3h12v18l-6-4.5L6 21V3Z"/>'),
+  user:  I('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>'),
+  back:  I('<path d="M15 5 8 12l7 7"/>'),
+  plus:  I('<path d="M12 5v14M5 12h14"/>'),
+  minus: I('<path d="M5 12h14"/>'),
+  trash: I('<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>'),
+  close: I('<path d="m6 6 12 12M18 6 6 18"/>'),
+  star:  '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.6 6 6.4.5-4.9 4.2 1.5 6.3L12 16.7 6.4 20l1.5-6.3L3 9.5 9.4 9 12 3Z"/></svg>',
+  shield:I('<path d="M12 3 5 6v6c0 4.4 3 7.7 7 9 4-1.3 7-4.6 7-9V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>'),
+  truck: I('<path d="M2 7h11v9H2zM13 10h4l3 3v3h-7"/><circle cx="6" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>'),
+  tag:   I('<path d="M3 12V4h8l9 9-8 8-9-9Z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor"/>'),
+  box:   I('<path d="M12 3 3 7.5V17l9 4.5 9-4.5V7.5L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9.5"/>'),
+  chev:  I('<path d="m9 5 7 7-7 7"/>'),
+  logout:I('<path d="M14 4H6v16h8"/><path d="m17 15 3-3-3-3M20 12H10"/>'),
+  key:   I('<circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M15 12v2"/>'),
+  check: I('<path d="m5 12 5 5 9-11"/>')
+};
+
+/* ============ catalogue ============ */
+const CATS = [
+  {id:'all',   label:'Everything'},
+  {id:'packs', label:'Packs'},
+  {id:'shells',label:'Shells'},
+  {id:'sleep', label:'Sleep'},
+  {id:'tools', label:'Tools'}
+];
+
+const PRODUCTS = [
+  {id:101,sku:'NB-RDG45',name:'Ridgeline 45 Pack',brand:'Northbound',cat:'packs',price:289,rating:4.7,reviews:128,hue:150,
+   blurb:'Forty-five litres, one hipbelt that actually transfers load, and a lid that comes off to become a summit pack.',
+   specs:[['Volume','45 L'],['Weight','1.42 kg'],['Fabric','210D ripstop nylon'],['Frame','Alloy perimeter']],
+   variants:[{id:1011,label:'45L / Moss',stock:6},{id:1012,label:'45L / Basalt',stock:0},{id:1013,label:'55L / Moss',stock:3}]},
+  {id:102,sku:'NB-STRM',name:'Stormline 3L Shell',brand:'Northbound',cat:'shells',price:410,rating:4.9,reviews:214,hue:196,
+   blurb:'A three-layer hardshell cut for movement. Pit zips, a helmet-compatible hood, and taped seams throughout.',
+   specs:[['Layers','3L membrane'],['Weight','385 g'],['Waterproof','20,000 mm'],['Seams','Fully taped']],
+   variants:[{id:1021,label:'S / Slate',stock:4},{id:1022,label:'M / Slate',stock:9},{id:1023,label:'M / Ember',stock:2},{id:1024,label:'L / Slate',stock:0}]},
+  {id:103,sku:'FL-QLT20',name:'Fell Quilt 20',brand:'Fell',cat:'sleep',price:365,rating:4.6,reviews:88,hue:38,
+   blurb:'850-fill down in a quilt that pairs to your pad, so you stop carrying insulation you only ever compress.',
+   specs:[['Rating','-7 °C'],['Fill','850 FP down'],['Weight','620 g'],['Packed','8 L']],
+   variants:[{id:1031,label:'Regular',stock:7},{id:1032,label:'Long',stock:1}]},
+  {id:104,sku:'KC-JETB',name:'Kettle Jetbox Stove',brand:'Kettle & Coil',cat:'tools',price:129,rating:4.4,reviews:302,hue:12,
+   blurb:'Boils half a litre in ninety seconds and nests inside its own pot. The regulator holds output in the cold.',
+   specs:[['Boil time','90 s / 0.5 L'],['Weight','345 g'],['Fuel','Iso-butane'],['Output','7,700 BTU']],
+   variants:[{id:1041,label:'Stove only',stock:12},{id:1042,label:'Stove + pot set',stock:5}]},
+  {id:105,sku:'AU-TRL30',name:'Auran Trail 30',brand:'Auran',cat:'packs',price:174,rating:4.3,reviews:61,hue:270,
+   blurb:'A day pack that carries like a bigger one. Vented back panel, two litres of hipbelt storage, rolltop closure.',
+   specs:[['Volume','30 L'],['Weight','790 g'],['Fabric','Recycled 100D'],['Closure','Rolltop']],
+   variants:[{id:1051,label:'30L / Chalk',stock:8},{id:1052,label:'30L / Ink',stock:4}]},
+  {id:106,sku:'NB-BSLY',name:'Basecamp Merino Layer',brand:'Northbound',cat:'shells',price:98,rating:4.5,reviews:176,hue:330,
+   blurb:'170gsm merino with flatlock seams and a longer tail. The one layer you can wear four days running.',
+   specs:[['Weight','170 gsm'],['Fibre','Merino / nylon'],['Seams','Flatlock'],['Fit','Regular']],
+   variants:[{id:1061,label:'S / Fog',stock:3},{id:1062,label:'M / Fog',stock:11},{id:1063,label:'L / Fog',stock:6}]},
+  {id:107,sku:'FL-PADX',name:'Fell Insulated Pad',brand:'Fell',cat:'sleep',price:212,rating:4.2,reviews:97,hue:172,
+   blurb:'R-value 5.4 in under half a kilo, with a valve that inflates in fifteen breaths and deflates in one pull.',
+   specs:[['R-value','5.4'],['Weight','455 g'],['Thickness','7.6 cm'],['Packed','2.1 L']],
+   variants:[{id:1071,label:'Regular',stock:9},{id:1072,label:'Wide',stock:2}]},
+  {id:108,sku:'KC-HDLM',name:'Coil Headlamp 600',brand:'Kettle & Coil',cat:'tools',price:76,rating:4.8,reviews:441,hue:56,
+   blurb:'Six hundred lumens with a red night mode that stays selected between sessions. Charges over USB-C.',
+   specs:[['Output','600 lm'],['Runtime','9 h high'],['Weight','88 g'],['Charging','USB-C']],
+   variants:[{id:1081,label:'Standard',stock:15},{id:1082,label:'Rechargeable pack',stock:6}]}
+];
+
+const SHIPPING = [
+  {id:1,method_name:'Standard',price:0,estimated_days:'5 – 7 days'},
+  {id:2,method_name:'Express',price:14.5,estimated_days:'2 days'},
+  {id:3,method_name:'Next day',price:29,estimated_days:'Tomorrow before 12:00'}
+];
+
+const REVIEWS = [
+  {who:'Marta K.',stars:5,txt:'Carried it for eleven days on the coast trail. Hipbelt never once needed readjusting.'},
+  {who:'Dev A.',stars:4,txt:'Excellent build. Docked one star because the lid pocket is smaller than it photographs.'},
+  {who:'Ronan T.',stars:5,txt:'Third season on mine. Still no wear at the stress points.'}
+];
+
+/* ============ endpoint registry (drawn from your actual DRF files) ============ */
+const ENDPOINTS = [
+  {m:'POST',  p:'/api/v1/auth/users/',                          g:'Authentication'},
+  {m:'POST',  p:'/api/v1/auth/token/',                          g:'Authentication'},
+  {m:'POST',  p:'/api/v1/auth/token/refresh/',                  g:'Authentication'},
+  {m:'POST',  p:'/api/v1/auth/social/google/',                  g:'Authentication'},
+  {m:'POST',  p:'/api/v1/auth/mfa/verify/',                     g:'Authentication'},
+  {m:'POST',  p:'/api/v1/auth/mfa/setup/',                      g:'Authentication'},
+  {m:'POST',  p:'/api/v1/auth/mfa/generate_backup_codes/',      g:'Authentication'},
+  {m:'DELETE',p:'/api/v1/auth/mfa/disable/',                    g:'Authentication'},
+  {m:'POST',  p:'/api/v1/auth/users/change_password/',          g:'Authentication'},
+  {m:'GET',   p:'/api/v1/auth/profiles/',                       g:'Authentication'},
+  {m:'GET',   p:'/api/v1/cart/cart/',                           g:'Cart'},
+  {m:'POST',  p:'/api/v1/cart/cart/add_item/',                  g:'Cart'},
+  {m:'POST',  p:'/api/v1/cart/cart/items/{id}/update/',         g:'Cart'},
+  {m:'DELETE',p:'/api/v1/cart/cart/items/{id}/remove/',         g:'Cart'},
+  {m:'POST',  p:'/api/v1/cart/cart/items/{id}/save-for-later/', g:'Cart'},
+  {m:'POST',  p:'/api/v1/cart/cart/apply_discount/',            g:'Cart'},
+  {m:'POST',  p:'/api/v1/cart/cart/select_shipping/',           g:'Cart'},
+  {m:'POST',  p:'/api/v1/cart/cart/transfer_cart/',             g:'Cart'},
+  {m:'POST',  p:'/api/v1/cart/cart/clear/',                     g:'Cart'},
+  {m:'GET',   p:'/api/v1/cart/saved-items/',                    g:'Cart'},
+  {m:'POST',  p:'/api/v1/cart/saved-items/{id}/move_to_cart/',  g:'Cart'},
+  {m:'GET',   p:'/api/v1/products/',                            g:'Products (Phase 1)', todo:true},
+  {m:'GET',   p:'/api/v1/products/{id}/',                       g:'Products (Phase 1)', todo:true},
+  {m:'GET',   p:'/api/v1/products/{id}/reviews/',               g:'Products (Phase 1)', todo:true},
+  {m:'POST',  p:'/api/v1/orders/',                              g:'Orders (Phase 3)',   todo:true},
+  {m:'GET',   p:'/api/v1/orders/{id}/tracking/',                g:'Orders (Phase 3)',   todo:true}
+];
+
+/* ============ state ============ */
+const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+  const r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
+  return v.toString(16);
+});
+
+const S = {
+  screen:'shop', tab:'shop', authView:'login', ctab:'log',
+  user:null, tokens:null, mfaPending:null,
+  cartSession:uuid(),
+  cart:[], discount:null, shipping:SHIPPING[0], saved:[], orders:[], wishlist:[],
+  product:null, variant:null,
+  filters:{q:'',cat:'all',sort:'featured'},
+  form:{email:'jordan@northbound.test', password:'correct-horse-42',
+        username:'jordan.m', password2:'correct-horse-42', mfacode:'', code:''},
+  log:[], hits:new Set(), busy:false, snack:null, formErr:null,
+  flags:{slow:false, oos:false, expired:false},
+  checkout:{addr:'14 Harbour Lane, Cape Town 8001', pay:'card'},
+  expanded:new Set()
+};
+
+/* ============ simulated API layer ============ */
+let reqId = 0;
+function latency(){ return S.flags.slow ? 900 + Math.random()*500 : 90 + Math.random()*90; }
+
+function record(entry){
+  S.log.unshift(entry);
+  if (S.log.length > 40) S.log.pop();
+  S.hits.add(entry.method + ' ' + entry.route);
+}
+
+function api(method, route, opts = {}){
+  const { body = null, path = route, status = 200, error = null } = opts;
+  const id = ++reqId;
+  const ms = Math.round(latency());
+
+  return new Promise(resolve => {
+    setTimeout(() => {
+      // Simulated expired access token -> 401 -> silent refresh -> retry.
+      if (S.flags.expired && S.tokens && !route.includes('token')) {
+        record({id:id+'a', method, route, path, status:401, ms:Math.round(ms*0.4),
+                body, res:{detail:'Given token not valid for any token type', code:'token_not_valid'}});
+        record({id:id+'b', method:'POST', route:'/api/v1/auth/token/refresh/', path:'/api/v1/auth/token/refresh/',
+                status:200, ms:60, body:{refresh:'eyJhbGciOi…rfsh'}, res:{access:'eyJhbGciOi…' + Math.random().toString(36).slice(2,8)}});
+        S.flags.expired = false;
+        S.tokens.access = 'eyJhbGciOi…' + Math.random().toString(36).slice(2,8);
+      }
+      record({id, method, route, path, status, ms, body, res: error || opts.res || {ok:true}});
+      renderConsole();
+      resolve({status, ms});
+    }, ms);
+  });
+}
+
+/* ============ helpers ============ */
+const money = n => 'R ' + n.toLocaleString('en-ZA',{minimumFractionDigits:2, maximumFractionDigits:2});
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const byId = id => PRODUCTS.find(p => p.id === id);
+
+function topo(hue, seed){
+  let rings = '';
+  for (let k = 0; k < 7; k++){
+    const base = 12 + k * 11;
+    let pts = [];
+    for (let a = 0; a <= 360; a += 12){
+      const t = a * Math.PI / 180;
+      const r = base * (1 + 0.10*Math.sin(3*t + seed) + 0.07*Math.sin(5*t + seed*1.7) + 0.04*Math.sin(7*t + k));
+      pts.push((100 + r*Math.cos(t)).toFixed(1) + ',' + (100 + r*Math.sin(t)).toFixed(1));
+    }
+    const op = 0.10 + k*0.035;
+    rings += `<polygon points="${pts.join(' ')}" fill="none" stroke="hsl(${hue} 42% 26%)" stroke-width="1.1" opacity="${op.toFixed(2)}"/>`;
+  }
+  return `<svg viewBox="0 0 200 200" style="width:100%;height:100%;display:block;background:hsl(${hue} 34% 93%)">${rings}
+    <circle cx="100" cy="100" r="7" fill="hsl(${hue} 46% 30%)" opacity=".5"/></svg>`;
+}
+
+const subtotal = () => S.cart.reduce((n,i) => n + i.price * i.qty, 0);
+const discountValue = () => {
+  if (!S.discount) return 0;
+  return S.discount.type === 'percentage' ? subtotal() * S.discount.amount / 100 : S.discount.amount;
+};
+const shippingCost = () => (S.cart.length ? (S.shipping ? S.shipping.price : 0) : 0);
+const grandTotal = () => Math.max(0, subtotal() - discountValue() + shippingCost());
+const cartCount = () => S.cart.reduce((n,i) => n + i.qty, 0);
+
+function snack(msg){
+  S.snack = msg;
+  render();
+  clearTimeout(snack._t);
+  snack._t = setTimeout(() => { S.snack = null; render(); }, 2600);
+}
+function go(screen, tab){
+  S.screen = screen;
+  if (tab) S.tab = tab;
+  S.formErr = null;
+  render();
+  const vp = document.getElementById('viewport');
+  if (vp) vp.scrollTop = 0;
+}
+
+/* ============ screens ============ */
+function scShop(){
+  const list = PRODUCTS.filter(p => S.filters.cat === 'all' || p.cat === S.filters.cat);
+  return `
+  <div class="screen">
+    <div class="appbar">
+      <div style="flex:1">
+        <h1>Northbound</h1>
+        <div class="sub">${S.user ? 'Welcome back, ' + esc(S.user.name.split(' ')[0]) : 'Browsing as a guest'}</div>
+      </div>
+      <button class="iconbtn" data-act="tab" data-v="search" aria-label="Search">${ICO.search}</button>
+      <button class="iconbtn" data-act="tab" data-v="cart" aria-label="Cart" style="position:relative">
+        ${ICO.cart}${cartCount() ? `<i class="badge">${cartCount()}</i>` : ''}
+      </button>
+    </div>
+    <div class="body">
+      <div class="chips">
+        ${CATS.map(c => `<button class="chip ${S.filters.cat===c.id?'on':''}" data-act="cat" data-v="${c.id}">${c.label}</button>`).join('')}
+      </div>
+      <div class="grid">
+        ${list.map(cardHTML).join('')}
+      </div>
+      <p class="muted" style="margin-top:18px;text-align:center">${list.length} of ${PRODUCTS.length} items &middot; prices include VAT</p>
+    </div>
+  </div>`;
+}
+
+function cardHTML(p){
+  const out = p.variants.every(v => v.stock === 0);
+  return `<button class="pcard" data-act="open" data-v="${p.id}">
+    <div class="art">${topo(p.hue, p.id)}${out ? '<span class="tagsold">Sold out</span>' : ''}</div>
+    <div class="meta">
+      <div class="br">${esc(p.brand)}</div>
+      <div class="nm">${esc(p.name)}</div>
+      <div class="row" style="gap:4px;margin-top:5px;color:#C99A2E">${ICO.star}<span style="font-size:11px;color:#6E7B72">${p.rating} (${p.reviews})</span></div>
+      <div class="pr">${money(p.price)}</div>
+    </div>
+  </button>`;
+}
+
+function scSearch(){
+  const q = S.filters.q.toLowerCase();
+  let list = PRODUCTS.filter(p =>
+    (S.filters.cat === 'all' || p.cat === S.filters.cat) &&
+    (!q || (p.name + p.brand + p.blurb).toLowerCase().includes(q)));
+  if (S.filters.sort === 'low')  list = [...list].sort((a,b) => a.price - b.price);
+  if (S.filters.sort === 'high') list = [...list].sort((a,b) => b.price - a.price);
+  if (S.filters.sort === 'rated')list = [...list].sort((a,b) => b.rating - a.rating);
+
+  return `
+  <div class="screen">
+    <div class="appbar"><div style="flex:1"><h1>Search</h1></div></div>
+    <div class="body">
+      <div class="searchfield">
+        ${ICO.search}
+        <input id="q" placeholder="Search packs, shells, stoves…" value="${esc(S.filters.q)}" autocomplete="off">
+        ${S.filters.q ? '<button class="iconbtn" style="width:26px;height:26px" data-act="clearq">'+ICO.close+'</button>' : ''}
+      </div>
+      <div class="chips">
+        ${[['featured','Featured'],['low','Price ↑'],['high','Price ↓'],['rated','Top rated']]
+          .map(([k,l]) => `<button class="chip ${S.filters.sort===k?'on':''}" data-act="sort" data-v="${k}">${l}</button>`).join('')}
+      </div>
+      <div class="chips">
+        ${CATS.map(c => `<button class="chip ${S.filters.cat===c.id?'on':''}" data-act="cat" data-v="${c.id}">${c.label}</button>`).join('')}
+      </div>
+      ${list.length ? `<div class="grid">${list.map(cardHTML).join('')}</div>`
+        : `<div class="empty"><h3>Nothing matched “${esc(S.filters.q)}”</h3><p class="muted">Try a broader term, or clear the category filter.</p></div>`}
+    </div>
+  </div>`;
+}
+
+function scProduct(){
+  const p = S.product, v = S.variant;
+  const stock = v ? v.stock : null;
+  return `
+  <div class="screen">
+    <div class="appbar">
+      <button class="iconbtn" data-act="back">${ICO.back}</button>
+      <div style="flex:1"><div class="sub mono" style="font-size:11px">${esc(p.sku)}</div></div>
+      <button class="iconbtn" data-act="wish" data-v="${p.id}" style="color:${S.wishlist.includes(p.id)?'#0E2A22':'#8E998F'}">${ICO.saved}</button>
+    </div>
+    <div class="body">
+      <div style="border-radius:var(--r);overflow:hidden;border:1px solid var(--hair);aspect-ratio:4/3">${topo(p.hue, p.id)}</div>
+      <div class="br" style="font-size:11px;color:var(--mute);letter-spacing:.06em;text-transform:uppercase;margin-top:16px">${esc(p.brand)}</div>
+      <h2 style="font-family:'Archivo';font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin:4px 0 8px">${esc(p.name)}</h2>
+      <div class="row" style="gap:6px;color:#C99A2E">${ICO.star}<span style="font-size:12.5px;color:var(--ink);font-weight:600">${p.rating}</span>
+        <span class="muted">${p.reviews} reviews</span></div>
+      <div class="mono" style="font-size:24px;font-weight:600;color:var(--forest);margin:12px 0 4px">${money(p.price)}</div>
+      <p class="muted" style="margin-top:10px">${esc(p.blurb)}</p>
+
+      <div class="h2">Choose an option</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        ${p.variants.map(x => `<button class="varbtn ${v && v.id===x.id?'on':''}" data-act="variant" data-v="${x.id}" ${x.stock===0?'disabled':''}>${esc(x.label)}</button>`).join('')}
+      </div>
+      ${v ? `<p class="muted" style="margin-top:9px">${stock > 0
+          ? (stock <= 3 ? `Only <b style="color:#9B3B1E">${stock} left</b> in stock` : `${stock} in stock`)
+          : 'Out of stock'}</p>` : '<p class="muted" style="margin-top:9px">Select an option to see stock.</p>'}
+
+      <div class="h2">Specification</div>
+      <div class="card">
+        ${p.specs.map(([k,val],i) => `<div class="between" style="padding:7px 0;${i?'border-top:1px solid var(--hair)':''}">
+          <span class="muted">${esc(k)}</span><span class="mono" style="font-size:12.5px;font-weight:500">${esc(val)}</span></div>`).join('')}
+      </div>
+
+      <div class="h2">What buyers say</div>
+      ${REVIEWS.map(r => `<div class="card" style="margin-bottom:8px">
+        <div class="between"><b style="font-size:13px">${esc(r.who)}</b>
+          <span style="color:#C99A2E;font-size:11px">${ICO.star.repeat(r.stars)}</span></div>
+        <p class="muted" style="margin-top:6px">${esc(r.txt)}</p></div>`).join('')}
+
+      <div style="height:14px"></div>
+      <button class="btn" data-act="add" ${!v || v.stock===0 || S.busy ? 'disabled':''}>
+        ${S.busy ? '<span class="spinner"></span> Adding' : (v && v.stock===0 ? 'Out of stock' : 'Add to cart')}
+      </button>
+      <button class="btn ghost" style="margin-top:8px" data-act="wish" data-v="${p.id}">
+        ${S.wishlist.includes(p.id) ? 'Saved to wishlist' : 'Save to wishlist'}
+      </button>
+    </div>
+  </div>`;
+}
+
+function scCart(){
+  if (!S.cart.length) return `
+  <div class="screen">
+    <div class="appbar"><div style="flex:1"><h1>Cart</h1></div></div>
+    <div class="empty">${ICO.cart}<h3 style="margin-top:12px">Your cart is empty</h3>
+      <p class="muted" style="margin-bottom:18px">Everything you add stays here, whether or not you sign in.</p>
+      <button class="btn sm lime" style="margin:0 auto" data-act="tab" data-v="shop">Browse the shop</button></div>
+  </div>`;
+
+  return `
+  <div class="screen">
+    <div class="appbar">
+      <div style="flex:1"><h1>Cart</h1><div class="sub">${cartCount()} item${cartCount()===1?'':'s'}</div></div>
+      <button class="linkbtn" data-act="clear">Clear all</button>
+    </div>
+    <div class="body">
+      ${S.cart.map(i => {
+        const p = byId(i.productId);
+        return `<div class="citem">
+          <div class="thumb">${topo(p.hue, p.id)}</div>
+          <div style="flex:1;min-width:0">
+            <div class="between" style="align-items:flex-start">
+              <div style="min-width:0">
+                <div style="font-size:13.5px;font-weight:600;line-height:1.3">${esc(p.name)}</div>
+                <div class="muted" style="font-size:11.5px">${esc(i.variantLabel)}</div>
+              </div>
+              <div class="mono" style="font-size:13px;font-weight:600;white-space:nowrap">${money(i.price*i.qty)}</div>
+            </div>
+            <div class="between" style="margin-top:9px">
+              <div class="stepper">
+                <button data-act="qty" data-v="${i.id}" data-d="-1">${ICO.minus}</button>
+                <span class="q">${i.qty}</span>
+                <button data-act="qty" data-v="${i.id}" data-d="1">${ICO.plus}</button>
+              </div>
+              <div class="row" style="gap:12px">
+                <button class="linkbtn" data-act="savelater" data-v="${i.id}">Save for later</button>
+                <button class="iconbtn" style="width:30px;height:30px;color:#9B3B1E" data-act="remove" data-v="${i.id}">${ICO.trash}</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+
+      <div class="h2">Discount code</div>
+      ${S.discount ? `<div class="card between" style="background:#F7FBEE;border-color:#CFE39A">
+          <div class="row" style="gap:9px;color:var(--forest)">${ICO.tag}
+            <div><b class="mono" style="font-size:13px">${esc(S.discount.code)}</b>
+            <div class="muted" style="font-size:11.5px">${S.discount.amount}% off your subtotal</div></div></div>
+          <button class="linkbtn" data-act="undiscount">Remove</button></div>`
+        : `<div class="row" style="gap:8px">
+            <input id="code" placeholder="Enter code" value="${esc(S.form.code)}" style="flex:1;padding:13px 14px;border:1px solid var(--hair);border-radius:11px;font:inherit;font-size:14px;text-transform:uppercase" autocomplete="off">
+            <button class="btn sm" data-act="discount" style="padding:13px 18px">Apply</button>
+          </div>
+          <p class="muted" style="margin-top:7px;font-size:11.5px">Try <b class="mono">DISCOUNT20</b> — the code hard-coded in <span class="mono">cart_views.py</span>.</p>`}
+
+      <div class="h2">Delivery</div>
+      ${SHIPPING.map(s => `<button class="ship ${S.shipping&&S.shipping.id===s.id?'on':''}" data-act="ship" data-v="${s.id}">
+        <span class="radio"></span>
+        <span style="flex:1"><b style="font-size:13.5px">${s.method_name}</b>
+          <span class="muted" style="display:block;font-size:11.5px">${s.estimated_days}</span></span>
+        <span class="mono" style="font-size:13px;font-weight:600">${s.price ? money(s.price) : 'Free'}</span>
+      </button>`).join('')}
+
+      <div class="hr"></div>
+      <div class="totals">
+        <div class="ln"><span>Subtotal</span><span>${money(subtotal())}</span></div>
+        ${S.discount ? `<div class="ln disc"><span>Discount (${S.discount.code})</span><span>− ${money(discountValue())}</span></div>` : ''}
+        <div class="ln"><span>Delivery</span><span>${shippingCost() ? money(shippingCost()) : 'Free'}</span></div>
+        <div class="ln big"><span>Total</span><span>${money(grandTotal())}</span></div>
+      </div>
+      <div style="height:14px"></div>
+      <button class="btn" data-act="checkout">Checkout &middot; ${money(grandTotal())}</button>
+      ${!S.user ? `<p class="muted" style="text-align:center;margin-top:10px;font-size:11.5px">
+        Signing in will merge this guest cart into your account.</p>` : ''}
+    </div>
+  </div>`;
+}
+
+function scSaved(){
+  return `
+  <div class="screen">
+    <div class="appbar"><div style="flex:1"><h1>Saved</h1><div class="sub">${S.saved.length} put aside</div></div></div>
+    <div class="body">
+      ${S.saved.length ? S.saved.map(i => {
+        const p = byId(i.productId);
+        return `<div class="citem">
+          <div class="thumb">${topo(p.hue,p.id)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13.5px;font-weight:600">${esc(p.name)}</div>
+            <div class="muted" style="font-size:11.5px">${esc(i.variantLabel)}</div>
+            <div class="between" style="margin-top:10px">
+              <span class="mono" style="font-size:13px;font-weight:600">${money(i.price)}</span>
+              <button class="btn sm lime" data-act="movecart" data-v="${i.id}">Move to cart</button>
+            </div>
+          </div></div>`;
+      }).join('') : `<div class="empty">${ICO.saved}<h3 style="margin-top:12px">Nothing saved yet</h3>
+        <p class="muted">Use “Save for later” in the cart to park an item without losing it.</p></div>`}
+
+      ${S.wishlist.length ? `<div class="h2">Wishlist</div>
+        <div class="grid">${S.wishlist.map(id => cardHTML(byId(id))).join('')}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function scCheckout(){
+  return `
+  <div class="screen">
+    <div class="appbar"><button class="iconbtn" data-act="tab" data-v="cart">${ICO.back}</button>
+      <div style="flex:1"><h1 style="font-size:22px">Checkout</h1></div></div>
+    <div class="body">
+      ${!S.user ? `<div class="card" style="background:var(--forest);border-color:var(--forest);color:var(--paper);margin-bottom:14px">
+        <b style="font-size:13.5px">Sign in to place this order</b>
+        <p style="font-size:12.5px;color:#A9C2B4;margin:6px 0 12px;line-height:1.5">Your cart moves across with you — nothing is lost.</p>
+        <button class="btn lime" data-act="tab" data-v="profile">Sign in</button></div>` : ''}
+
+      <div class="h2" style="margin-top:0">Deliver to</div>
+      <div class="card">
+        <div class="row" style="gap:10px;color:var(--forest)">${ICO.truck}
+          <div style="flex:1"><b style="font-size:13.5px">${S.user ? esc(S.user.name) : 'Guest'}</b>
+          <div class="muted" style="font-size:12.5px">${esc(S.checkout.addr)}</div></div></div>
+      </div>
+
+      <div class="h2">Payment</div>
+      ${[['card','Card','Visa •••• 4242'],['eft','Instant EFT','Bank transfer'],['cod','Cash on delivery','Pay the courier']]
+        .map(([k,l,sub]) => `<button class="ship ${S.checkout.pay===k?'on':''}" data-act="pay" data-v="${k}">
+          <span class="radio"></span><span style="flex:1"><b style="font-size:13.5px">${l}</b>
+          <span class="muted" style="display:block;font-size:11.5px">${sub}</span></span></button>`).join('')}
+
+      <div class="h2">Order summary</div>
+      <div class="card totals">
+        ${S.cart.map(i => `<div class="ln"><span style="max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(byId(i.productId).name)} × ${i.qty}</span><span>${money(i.price*i.qty)}</span></div>`).join('')}
+        ${S.discount ? `<div class="ln disc"><span>${esc(S.discount.code)}</span><span>− ${money(discountValue())}</span></div>` : ''}
+        <div class="ln"><span>Delivery</span><span>${shippingCost()?money(shippingCost()):'Free'}</span></div>
+        <div class="ln big"><span>Total</span><span>${money(grandTotal())}</span></div>
+      </div>
+      <div style="height:16px"></div>
+      <button class="btn" data-act="placeorder" ${!S.user||S.busy?'disabled':''}>
+        ${S.busy ? '<span class="spinner"></span> Placing order' : 'Place order · ' + money(grandTotal())}</button>
+      <p class="muted" style="text-align:center;margin-top:10px;font-size:11.5px">
+        <span class="mono">POST /api/v1/orders/</span> — not yet implemented server-side.</p>
+    </div>
+  </div>`;
+}
+
+function scOrders(){
+  return `
+  <div class="screen">
+    <div class="appbar"><div style="flex:1"><h1>Orders</h1><div class="sub">${S.orders.length} placed</div></div></div>
+    <div class="body">
+      ${S.orders.length ? S.orders.map(o => `<div class="card" style="margin-bottom:10px">
+        <div class="between"><b class="mono" style="font-size:12.5px">${o.ref}</b>
+          <span class="mono" style="font-size:12.5px;font-weight:600">${money(o.total)}</span></div>
+        <div class="muted" style="font-size:11.5px;margin:3px 0 12px">${o.date} · ${o.items} item${o.items===1?'':'s'} · ${esc(o.ship)}</div>
+        <div class="track">
+          ${['Order placed','Payment confirmed','Packed','Out for delivery','Delivered']
+            .map((s,ix) => `<div class="stp ${ix<=o.stage?'done':''}">
+              <b style="font-size:12.5px;color:${ix<=o.stage?'var(--ink)':'var(--mute)'}">${s}</b>
+              ${ix===o.stage?`<div class="muted" style="font-size:11px">Current status</div>`:''}
+            </div>`).join('')}
+        </div>
+        ${o.stage < 4 ? `<button class="btn ghost sm" style="width:100%" data-act="advance" data-v="${o.ref}">Advance status (simulate webhook)</button>` : ''}
+      </div>`).join('')
+      : `<div class="empty">${ICO.box}<h3 style="margin-top:12px">No orders yet</h3>
+         <p class="muted">Place one from the cart to see live tracking here.</p></div>`}
+    </div>
+  </div>`;
+}
+
+function scProfile(){
+  if (!S.user) return scAuth();
+  return `
+  <div class="screen">
+    <div class="appbar"><div style="flex:1"><h1>Account</h1></div>
+      <button class="iconbtn" data-act="logout">${ICO.logout}</button></div>
+    <div class="body">
+      <div class="card row" style="gap:13px">
+        <div style="width:52px;height:52px;border-radius:50%;background:var(--forest);color:var(--lime);display:grid;place-items:center;
+          font-family:'Archivo';font-weight:800;font-size:18px">${esc(S.user.name[0])}</div>
+        <div style="flex:1;min-width:0">
+          <b style="font-size:15px">${esc(S.user.name)}</b>
+          <div class="muted" style="font-size:12.5px;overflow:hidden;text-overflow:ellipsis">${esc(S.user.email)}</div>
+          <div class="row" style="gap:6px;margin-top:6px;color:#2F7A4F;font-size:11.5px">${ICO.check}<span>Email verified</span></div>
+        </div>
+      </div>
+
+      <div class="h2">Security</div>
+      <div class="card">
+        <div class="between">
+          <div class="row" style="gap:10px;color:var(--forest)">${ICO.shield}
+            <div><b style="font-size:13.5px">Two-factor authentication</b>
+            <div class="muted" style="font-size:11.5px">${S.user.mfa ? 'Authenticator app · active' : 'Not set up'}</div></div></div>
+          <button class="btn sm ${S.user.mfa?'ghost':'lime'}" data-act="togglemfa">${S.user.mfa?'Turn off':'Turn on'}</button>
+        </div>
+        ${S.user.mfa ? `<div class="hr"></div>
+          <div class="between"><div class="row" style="gap:10px;color:var(--forest)">${ICO.key}
+            <div><b style="font-size:13.5px">Backup codes</b>
+            <div class="muted" style="font-size:11.5px">${S.user.backup ? S.user.backup.length + ' unused codes' : 'None generated'}</div></div></div>
+            <button class="btn sm ghost" data-act="backupcodes">Generate</button></div>
+          ${S.user.backup ? `<div class="mono" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:11px;font-size:12px;
+            background:var(--paper);padding:11px;border-radius:9px">${S.user.backup.map(c => `<span>${c}</span>`).join('')}</div>` : ''}` : ''}
+      </div>
+
+      <div class="h2">Session</div>
+      <div class="card kvs" style="font-size:11.5px">
+        <div class="between" style="padding:5px 0"><span class="muted">Access token</span><span class="mono">${esc(S.tokens.access.slice(0,18))}…</span></div>
+        <div class="between" style="padding:5px 0"><span class="muted">mfa_verified claim</span><span class="mono" style="color:${S.tokens.mfa_verified?'#2F7A4F':'#9B3B1E'}">${S.tokens.mfa_verified}</span></div>
+        <div class="between" style="padding:5px 0"><span class="muted">Cart session header</span><span class="mono">${esc(S.cartSession.slice(0,13))}…</span></div>
+      </div>
+
+      <div class="h2">Orders</div>
+      <button class="card between" style="width:100%;text-align:left" data-act="tab" data-v="orders">
+        <span><b style="font-size:13.5px">Order history</b>
+        <span class="muted" style="display:block;font-size:11.5px">${S.orders.length} order${S.orders.length===1?'':'s'}</span></span>
+        <span style="color:var(--mute)">${ICO.chev}</span>
+      </button>
+    </div>
+  </div>`;
+}
+
+function scAuth(){
+  const v = S.authView;
+  if (v === 'mfa') return `
+  <div class="screen">
+    <div class="appbar"><button class="iconbtn" data-act="authview" data-v="login">${ICO.back}</button></div>
+    <div class="body" style="padding-top:12px">
+      <div style="width:46px;height:46px;border-radius:13px;background:var(--forest);color:var(--lime);display:grid;place-items:center;margin-bottom:16px">${ICO.shield}</div>
+      <h2 style="font-family:'Archivo';font-size:24px;font-weight:800;letter-spacing:-.02em">Enter your code</h2>
+      <p class="muted" style="margin:8px 0 20px">Six digits from your authenticator app. Any six will do here — try <b class="mono">000000</b> to see the failure path.</p>
+      ${S.formErr ? `<div class="err">${esc(S.formErr)}</div>` : ''}
+      <div class="field"><label>Verification code</label>
+        <input id="mfacode" inputmode="numeric" maxlength="6" placeholder="••••••" value="${esc(S.form.mfacode)}" class="mono" style="letter-spacing:.5em;font-size:19px;text-align:center"></div>
+      <button class="btn" data-act="mfaverify" ${S.busy?'disabled':''}>${S.busy?'<span class="spinner"></span> Verifying':'Verify and sign in'}</button>
+      <button class="btn ghost" style="margin-top:8px" data-act="usebackup">Use a backup code instead</button>
+      <p class="muted" style="margin-top:16px;font-size:11.5px">On success the server reissues a token pair carrying
+        <span class="mono">mfa_verified: true</span> — exactly as <span class="mono">MFAViewSet.verify</span> does.</p>
+    </div>
+  </div>`;
+
+  const reg = v === 'register';
+  return `
+  <div class="screen">
+    <div class="appbar"><div style="flex:1"><h1 style="font-size:24px">${reg?'Create account':'Sign in'}</h1>
+      <div class="sub">${reg?'Takes about thirty seconds':'Welcome back'}</div></div></div>
+    <div class="body">
+      ${S.formErr ? `<div class="err">${esc(S.formErr)}</div>` : ''}
+      ${reg ? `<div class="field"><label>Username</label><input id="username" placeholder="jordan.m" value="${esc(S.form.username)}" autocomplete="off"></div>` : ''}
+      <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@example.com" value="${esc(S.form.email)}" autocomplete="off"></div>
+      <div class="field"><label>Password</label><input id="password" type="password" placeholder="••••••••" value="${esc(S.form.password)}"></div>
+      ${reg ? `<div class="field"><label>Confirm password</label><input id="password2" type="password" placeholder="••••••••" value="${esc(S.form.password2)}"></div>
+        <p class="muted" style="font-size:11.5px;margin-bottom:14px">Both fields are compared by
+        <span class="mono">UserRegistrationSerializer.validate</span> before the user is created.</p>` : ''}
+      <button class="btn" data-act="${reg?'register':'login'}" ${S.busy?'disabled':''}>
+        ${S.busy?'<span class="spinner"></span> Working':(reg?'Create account':'Sign in')}</button>
+
+      <div class="row" style="margin:18px 0;gap:12px"><div style="flex:1;height:1px;background:var(--hair)"></div>
+        <span class="muted" style="font-size:11px">OR</span><div style="flex:1;height:1px;background:var(--hair)"></div></div>
+      <button class="btn ghost" data-act="social" data-v="google">Continue with Google</button>
+      <button class="btn ghost" style="margin-top:8px" data-act="social" data-v="facebook">Continue with Facebook</button>
+
+      <p style="text-align:center;margin-top:20px;font-size:13px;color:var(--mute)">
+        ${reg?'Already have an account?':'New here?'}
+        <button class="linkbtn" style="font-size:13px;color:var(--forest);font-weight:600" data-act="authview" data-v="${reg?'login':'register'}">
+          ${reg?'Sign in':'Create one'}</button></p>
+      ${cartCount() ? `<p class="muted" style="text-align:center;margin-top:14px;font-size:11.5px">
+        ${cartCount()} guest item${cartCount()===1?'':'s'} will merge into your account on sign-in.</p>` : ''}
+    </div>
+  </div>`;
+}
+
+/* ============ render ============ */
+const SCREENS = {shop:scShop, search:scSearch, product:scProduct, cart:scCart,
+                 saved:scSaved, checkout:scCheckout, orders:scOrders, profile:scProfile};
+
+const NAV = [
+  {k:'shop',   l:'Shop',    i:'shop'},
+  {k:'search', l:'Search',  i:'search'},
+  {k:'cart',   l:'Cart',    i:'cart'},
+  {k:'saved',  l:'Saved',   i:'saved'},
+  {k:'profile',l:'Account', i:'user'}
+];
+
+function render(){
+  document.getElementById('viewport').innerHTML =
+    (SCREENS[S.screen] || scShop)() + (S.snack ? `<div class="snack"><span class="dot"></span><span>${esc(S.snack)}</span></div>` : '');
+
+  document.getElementById('bottomnav').innerHTML = NAV.map(n => `
+    <button class="navitem ${S.tab===n.k?'active':''}" data-act="tab" data-v="${n.k}">
+      ${S.tab===n.k?'<i class="navpill"></i>':''}${ICO[n.i]}<span>${n.l}</span>
+      ${n.k==='cart'&&cartCount()?`<i class="badge" style="top:4px;right:22px">${cartCount()}</i>`:''}
+    </button>`).join('');
+
+  document.getElementById('sessionpill').textContent = S.user ? 'authenticated · ' + S.user.email.split('@')[0] : 'guest session';
+  document.getElementById('sessionpill').className = 'pill' + (S.user ? ' on' : '');
+  document.getElementById('netpill').textContent = 'v1 · ' + (S.flags.slow ? '~1.2s' : '~120ms');
+  renderConsole();
+}
+
+/* ============ console ============ */
+const CTABS = [{k:'log',l:'Request log'},{k:'state',l:'Session'},{k:'cov',l:'Coverage'},{k:'flags',l:'Simulate'}];
+
+function renderConsole(){
+  document.getElementById('ctabs').innerHTML =
+    CTABS.map(t => `<button class="ctab ${S.ctab===t.k?'on':''}" data-act="ctab" data-v="${t.k}">${t.l}</button>`).join('');
+  document.getElementById('cbody').innerHTML = ({log:cLog, state:cState, cov:cCov, flags:cFlags}[S.ctab])();
+}
+
+function cLog(){
+  if (!S.log.length) return `<div class="ctitle">Waiting</div>
+    <p class="cnote">No calls yet. Tap anything in the app — each request is logged here with its method, route, status and latency.</p>`;
+  return `<div class="between" style="margin-bottom:10px">
+      <span class="ctitle" style="margin:0">${S.log.length} calls</span>
+      <button class="clear" data-act="clearlog">clear</button></div>` +
+    S.log.map(r => {
+      const open = S.expanded.has(r.id);
+      const cls = r.status >= 400 ? 'bad' : 'ok';
+      return `<div class="req">
+        <button class="hd" data-act="expand" data-v="${r.id}">
+          <span class="m ${r.method}">${r.method}</span>
+          <span class="pt">${esc(r.path)}</span>
+          <span class="st ${cls}">${r.status} · ${r.ms}ms</span>
+        </button>
+        ${open ? `<pre>${esc(JSON.stringify({request:r.body || null, response:r.res}, null, 2))}</pre>` : ''}
+      </div>`;
+    }).join('');
+}
+
+function cState(){
+  const rows = [
+    ['auth state', S.user ? 'authenticated' : 'guest', !!S.user],
+    ['user id', S.user ? String(S.user.id) : '—', false],
+    ['access token', S.tokens ? S.tokens.access.slice(0,22) + '…' : '—', false],
+    ['refresh token', S.tokens ? S.tokens.refresh.slice(0,22) + '…' : '—', false],
+    ['mfa_verified', S.tokens ? String(S.tokens.mfa_verified) : '—', S.tokens && S.tokens.mfa_verified],
+    ['X-Cart-Session', S.cartSession, !S.user],
+    ['cart items', String(cartCount()), false],
+    ['cart subtotal', money(subtotal()), false],
+    ['discount', S.discount ? S.discount.code : 'none', !!S.discount],
+    ['shipping', S.shipping ? S.shipping.method_name : 'none', false],
+    ['saved for later', String(S.saved.length), false],
+    ['orders', String(S.orders.length), false]
+  ];
+  return `<div class="ctitle">Client state</div><div class="kvs">
+    ${rows.map(([k,v,hi]) => `<div class="kv"><span class="k">${k}</span><span class="v ${hi?'hi':''}">${esc(v)}</span></div>`).join('')}
+  </div>
+  <div class="ctitle">Header sent on every call</div>
+  <div class="kvs"><div class="kv"><span class="k">Authorization</span><span class="v">${S.tokens?'Bearer ' + esc(S.tokens.access.slice(0,10)) + '…':'—'}</span></div>
+  <div class="kv"><span class="k">X-Cart-Session</span><span class="v">${esc(S.cartSession.slice(0,18))}…</span></div>
+  <div class="kv"><span class="k">X-App-Version</span><span class="v">1.0.0 (build 41)</span></div></div>
+  <p class="cnote">In Flutter these are attached by a single <b>dio</b> interceptor. The cart session is a client-generated UUID in <b>flutter_secure_storage</b> — it replaces the browser cookie your current middleware reads.</p>`;
+}
+
+function cCov(){
+  const live = ENDPOINTS.filter(e => !e.todo);
+  const hit = live.filter(e => S.hits.has(e.m + ' ' + e.p)).length;
+  const pct = Math.round(hit / live.length * 100);
+  const groups = [...new Set(ENDPOINTS.map(e => e.g))];
+  return `<div class="ctitle">Endpoint coverage · ${hit}/${live.length} exercised</div>
+    <div class="covbar"><i style="width:${pct}%"></i></div>
+    ${groups.map(g => `<div class="ctitle">${esc(g)}</div>` +
+      ENDPOINTS.filter(e => e.g === g).map(e => {
+        const on = S.hits.has(e.m + ' ' + e.p);
+        return `<div class="ep ${e.todo?'todo':(on?'hit':'')}">
+          <span class="tick">${on?'✓':''}</span>
+          <span class="m ${e.m}" style="font-size:9px">${e.m}</span>
+          <span style="flex:1;word-break:break-all">${esc(e.p.replace('/api/v1',''))}</span></div>`;
+      }).join('')).join('')}
+    <p class="cnote">Solid ticks are routes that exist today in <b>authentication_urls.py</b> and <b>cart_urls.py</b>. Dashed boxes are the routes this prototype assumes but you have not built yet — that list is your Phase 1 and Phase 3 backlog.</p>`;
+}
+
+function cFlags(){
+  const F = [
+    ['slow','Slow network','Adds ~1.2s to every call. Check that spinners and disabled buttons hold up.'],
+    ['oos','Next add-to-cart fails','Returns 400 with the exact error AddToCartSerializer raises when inventory is short.'],
+    ['expired','Access token expired','Next call returns 401, the client silently refreshes and retries. Watch three entries appear.']
+  ];
+  return `<div class="ctitle">Failure simulation</div>
+    ${F.map(([k,l,d]) => `<button class="flag ${S.flags[k]?'on':''}" data-act="flag" data-v="${k}">
+      <span class="sw"></span><span class="tx">${l}<em>${d}</em></span></button>`).join('')}
+    <div class="ctitle">Guest → account merge</div>
+    <p class="cnote">Add items while signed out, then sign in. The client fires
+    <b>POST /cart/cart/transfer_cart/</b> with the stored session id and the server merges both carts inside one transaction.</p>
+    <div class="ctitle">Known gap this prototype exposes</div>
+    <p class="cnote">Update, remove and save-for-later are reachable from a guest cart in the UI, but your
+    <b>cart_views.py</b> filters those three actions on <b>cart__user=request.user</b>. A guest hitting them gets a 404. Fix before Phase 2.</p>`;
+}
+
+/* ============ actions ============ */
+async function withBusy(fn){
+  S.busy = true; render();
+  try { await fn(); } finally { S.busy = false; render(); }
+}
+
+const ACTIONS = {
+  tab(v){
+    if (v === 'profile' && !S.user){ S.tab = 'profile'; S.screen = 'profile'; S.authView = 'login'; render(); return; }
+    S.tab = v; go(v, v);
+    if (v === 'cart')  api('GET','/api/v1/cart/cart/',{res:{id:9,total_items:cartCount(),subtotal:subtotal()}});
+    if (v === 'saved') api('GET','/api/v1/cart/saved-items/',{res:{count:S.saved.length}});
+    if (v === 'search')setTimeout(() => { const q = document.getElementById('q'); if (q) q.focus(); }, 60);
+  },
+  cat(v){ S.filters.cat = v; render(); },
+  sort(v){ S.filters.sort = v; render(); },
+  clearq(){ S.filters.q = ''; render(); },
+  open(v){
+    S.product = byId(+v);
+    S.variant = S.product.variants.find(x => x.stock > 0) || null;
+    go('product');
+    api('GET','/api/v1/products/' + v + '/',{path:'/api/v1/products/' + v + '/',res:{id:+v,sku:S.product.sku,name:S.product.name}});
+  },
+  back(){ go(S.tab); },
+  variant(v){ S.variant = S.product.variants.find(x => x.id === +v); render(); },
+  wish(v){
+    const id = +v;
+    S.wishlist.includes(id) ? S.wishlist.splice(S.wishlist.indexOf(id),1) : S.wishlist.push(id);
+    snack(S.wishlist.includes(id) ? 'Saved to wishlist' : 'Removed from wishlist');
+  },
+
+  add(){ withBusy(async () => {
+    const p = S.product, v = S.variant;
+    if (S.flags.oos){
+      S.flags.oos = false;
+      await api('POST','/api/v1/cart/cart/add_item/',{
+        body:{product:p.id,variant:v.id,quantity:1}, status:400,
+        error:{non_field_errors:['Only 0 items available.']}});
+      snack('Only 0 items available.');
+      return;
+    }
+    await api('POST','/api/v1/cart/cart/add_item/',{
+      body:{product:p.id,variant:v.id,quantity:1},
+      res:{id:9,total_items:cartCount()+1,subtotal:subtotal()+p.price}});
+    const key = p.id + ':' + v.id;
+    const found = S.cart.find(i => i.key === key);
+    if (found) found.qty++;
+    else S.cart.push({id:Date.now()%100000,key,productId:p.id,variantId:v.id,variantLabel:v.label,price:p.price,qty:1});
+    snack(p.name + ' added to cart');
+  });},
+
+  qty(v, el){
+    const item = S.cart.find(i => i.id === +v);
+    const d = +el.dataset.d;
+    if (!item) return;
+    if (item.qty + d < 1){ ACTIONS.remove(v); return; }
+    item.qty += d;
+    api('POST','/api/v1/cart/cart/items/{id}/update/',{
+      path:`/api/v1/cart/cart/items/${item.id}/update/`, body:{quantity:item.qty}, res:{id:9,total_items:cartCount()}});
+    render();
+  },
+  remove(v){
+    const ix = S.cart.findIndex(i => i.id === +v);
+    if (ix < 0) return;
+    const item = S.cart[ix];
+    S.cart.splice(ix,1);
+    api('DELETE','/api/v1/cart/cart/items/{id}/remove/',{path:`/api/v1/cart/cart/items/${item.id}/remove/`,res:{id:9,total_items:cartCount()}});
+    snack('Item removed');
+  },
+  savelater(v){
+    const ix = S.cart.findIndex(i => i.id === +v);
+    if (ix < 0) return;
+    const item = S.cart.splice(ix,1)[0];
+    S.saved.push(item);
+    api('POST','/api/v1/cart/cart/items/{id}/save-for-later/',{
+      path:`/api/v1/cart/cart/items/${item.id}/save-for-later/`, res:{id:item.id,product:item.productId,variant:item.variantId}});
+    snack('Moved to Saved');
+  },
+  movecart(v){
+    const ix = S.saved.findIndex(i => i.id === +v);
+    if (ix < 0) return;
+    const item = S.saved.splice(ix,1)[0];
+    const found = S.cart.find(i => i.key === item.key);
+    if (found) found.qty++; else S.cart.push({...item, qty:1});
+    api('POST','/api/v1/cart/saved-items/{id}/move_to_cart/',{path:`/api/v1/cart/saved-items/${item.id}/move_to_cart/`,res:{id:9,total_items:cartCount()}});
+    snack('Moved to cart');
+  },
+  clear(){
+    S.cart = []; S.discount = null;
+    api('POST','/api/v1/cart/cart/clear/',{res:{id:9,total_items:0,subtotal:0}});
+    snack('Cart cleared');
+  },
+  discount(){
+    const code = String(S.form.code || '').trim().toUpperCase();
+    if (!code) return;
+    S.form.code = '';
+    if (code === 'DISCOUNT20'){
+      S.discount = {code, type:'percentage', amount:20};
+      api('POST','/api/v1/cart/cart/apply_discount/',{body:{code},res:{code,discount_type:'percentage',amount:20}});
+      snack('20% off applied');
+    } else {
+      api('POST','/api/v1/cart/cart/apply_discount/',{body:{code},status:400,error:{error:'Invalid discount code'}});
+      snack('That code is not valid');
+    }
+    render();
+  },
+  undiscount(){ S.discount = null; snack('Discount removed'); },
+  ship(v){
+    S.shipping = SHIPPING.find(s => s.id === +v);
+    api('POST','/api/v1/cart/cart/select_shipping/',{body:{shipping_method_id:+v},res:{id:9,shipping_cost:S.shipping.price}});
+    render();
+  },
+  checkout(){ go('checkout'); },
+  pay(v){ S.checkout.pay = v; render(); },
+
+  placeorder(){ withBusy(async () => {
+    await api('POST','/api/v1/orders/',{
+      body:{payment_method:S.checkout.pay, shipping_method:S.shipping.id, total:+grandTotal().toFixed(2)},
+      status:201, res:{id:1,reference:'NB-' + (4820 + S.orders.length),status:'confirmed'}});
+    S.orders.unshift({
+      ref:'NB-' + (4820 + S.orders.length), total:grandTotal(), items:cartCount(),
+      ship:S.shipping.method_name, date:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}), stage:1});
+    S.cart = []; S.discount = null;
+    go('orders','orders');
+    snack('Order placed — tracking is live');
+  });},
+  advance(v){
+    const o = S.orders.find(x => x.ref === v);
+    if (!o) return;
+    o.stage = Math.min(4, o.stage + 1);
+    api('GET','/api/v1/orders/{id}/tracking/',{path:`/api/v1/orders/${v}/tracking/`,res:{reference:v,stage:o.stage}});
+    render();
+  },
+
+  authview(v){ S.authView = v; S.formErr = null; render(); },
+
+  login(){
+    const email = String(S.form.email || ''), pw = String(S.form.password || '');
+    withBusy(async () => {
+    if (!email.includes('@') || pw.length < 6){
+      S.formErr = 'Enter a valid email and a password of at least 6 characters.'; return;
+    }
+    await api('POST','/api/v1/auth/token/',{body:{email,password:'••••••••'},res:{access:'eyJhbGciOi…',refresh:'eyJhbGciOi…',mfa_required:true}});
+    S.mfaPending = {email};
+    S.authView = 'mfa';
+    snack('Password accepted — one more step');
+  });},
+
+  register(){
+    const u = String(S.form.username||''), email = String(S.form.email||'');
+    const p1 = String(S.form.password||''), p2 = String(S.form.password2||'');
+    withBusy(async () => {
+    if (p1 !== p2){
+      await api('POST','/api/v1/auth/users/',{body:{email,username:u,password:'••••',password2:'••••'},
+        status:400,error:{password:["Password fields didn't match."]}});
+      S.formErr = "Password fields didn't match."; return;
+    }
+    if (!u || !email.includes('@') || p1.length < 8){
+      S.formErr = 'Username, a valid email and an 8-character password are all required.'; return;
+    }
+    await api('POST','/api/v1/auth/users/',{body:{email,username:u,password:'••••••••',password2:'••••••••'},
+      status:201,res:{id:42,email,username:u,email_verified:false}});
+    S.mfaPending = {email, name:u};
+    S.authView = 'mfa';
+    snack('Account created — verification email sent');
+  });},
+
+  social(v){ withBusy(async () => {
+    await api('POST',`/api/v1/auth/social/${v}/`,{path:`/api/v1/auth/social/${v}/`,
+      body:{token:'ya29.a0Af…idToken'},res:{access:'eyJhbGciOi…',refresh:'eyJhbGciOi…',created:false}});
+    finishLogin('jordan@northbound.test','Jordan Mabaso', false);
+    snack('Signed in with ' + v[0].toUpperCase() + v.slice(1));
+  });},
+
+  mfaverify(){
+    const code = String(S.form.mfacode || '');
+    withBusy(async () => {
+    if (code === '000000'){
+      await api('POST','/api/v1/auth/mfa/verify/',{body:{code,device_type:'authenticator'},status:400,error:{error:'Invalid verification code'}});
+      S.formErr = 'Invalid verification code. Two attempts remain.'; return;
+    }
+    if (code.length !== 6){ S.formErr = 'The code is exactly six digits.'; return; }
+    await api('POST','/api/v1/auth/mfa/verify/',{body:{code,device_type:'authenticator'},
+      res:{access:'eyJhbGciOi…mfaTrue',refresh:'eyJhbGciOi…rfsh'}});
+    const em = S.mfaPending ? S.mfaPending.email : 'jordan@northbound.test';
+    finishLogin(em, (S.mfaPending && S.mfaPending.name) || 'Jordan Mabaso', true);
+    snack('Signed in — mfa_verified is now true');
+  });},
+
+  usebackup(){ withBusy(async () => {
+    await api('POST','/api/v1/auth/mfa/verify/',{body:{code:'A7F2-91KD',device_type:'backup'},res:{access:'eyJhbGciOi…mfaTrue',refresh:'eyJ…'}});
+    finishLogin('jordan@northbound.test','Jordan Mabaso', true);
+    snack('Backup code accepted');
+  });},
+
+  togglemfa(){ withBusy(async () => {
+    if (S.user.mfa){
+      await api('DELETE','/api/v1/auth/mfa/disable/',{status:204,res:{}});
+      S.user.mfa = false; S.user.backup = null;
+      snack('Two-factor turned off');
+    } else {
+      await api('POST','/api/v1/auth/mfa/setup/',{body:{device_type:'authenticator'},
+        res:{device_id:7,secret:'JBSWY3DPEHPK3PXP',qr:'otpauth://totp/…'}});
+      S.user.mfa = true;
+      snack('Authenticator registered');
+    }
+  });},
+
+  backupcodes(){ withBusy(async () => {
+    const codes = Array.from({length:8}, () =>
+      Math.random().toString(36).slice(2,6).toUpperCase() + '-' + Math.random().toString(36).slice(2,6).toUpperCase());
+    await api('POST','/api/v1/auth/mfa/generate_backup_codes/',{res:{backup_codes:codes}});
+    S.user.backup = codes;
+    snack('Eight new codes generated');
+  });},
+
+  logout(){
+    S.user = null; S.tokens = null; S.mfaPending = null;
+    S.cartSession = uuid();
+    S.authView = 'login';
+    snack('Signed out — back to a guest session');
+    go('profile','profile');
+  },
+
+  ctab(v){ S.ctab = v; renderConsole(); },
+  expand(v){ S.expanded.has(v) ? S.expanded.delete(v) : S.expanded.add(v); renderConsole(); },
+  clearlog(){ S.log = []; S.expanded.clear(); renderConsole(); },
+  flag(v){ S.flags[v] = !S.flags[v]; render(); }
+};
+
+async function finishLogin(email, name, mfa){
+  S.form.mfacode = '';
+  S.user = {id:42, email, name, mfa, backup:null};
+  S.tokens = {access:'eyJhbGciOiJIUzI1NiIs…' + Math.random().toString(36).slice(2,7),
+              refresh:'eyJhbGciOiJIUzI1NiIs…rfsh', mfa_verified:mfa};
+  const guestItems = cartCount();
+  if (guestItems){
+    await api('POST','/api/v1/cart/cart/transfer_cart/',{
+      body:{session_id:S.cartSession},
+      res:{id:9,total_items:guestItems,merged:true}});
+    setTimeout(() => snack(guestItems + ' guest item' + (guestItems===1?'':'s') + ' merged into your cart'), 900);
+  }
+  await api('GET','/api/v1/auth/profiles/',{res:{first_name:name.split(' ')[0],last_name:name.split(' ')[1]||'',address:S.checkout.addr}});
+  go('profile','profile');
+}
+
+/* ============ wiring ============ */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const fn = ACTIONS[el.dataset.act];
+  if (fn) fn(el.dataset.v, el);
+});
+document.addEventListener('input', e => {
+  const id = e.target.id;
+  if (!id) return;
+  if (id === 'q'){
+    S.filters.q = e.target.value;
+    const pos = e.target.selectionStart;
+    render();
+    const q = document.getElementById('q');
+    if (q){ q.focus(); q.setSelectionRange(pos,pos); }
+    return;
+  }
+  S.form[id] = e.target.value;
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (e.target.id === 'code') ACTIONS.discount();
+  if (e.target.id === 'mfacode') ACTIONS.mfaverify();
+  if (e.target.id === 'password' || e.target.id === 'password2')
+    (S.authView === 'register' ? ACTIONS.register : ACTIONS.login)();
+});
+
+render();
+api('GET','/api/v1/cart/cart/',{res:{id:null,total_items:0,subtotal:0,session_id:S.cartSession}});
+</script>
+</body>
+</html>
