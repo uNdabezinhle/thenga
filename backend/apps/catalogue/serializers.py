@@ -55,7 +55,9 @@ class VariantSerializer(serializers.ModelSerializer):
         return inv.available if inv else 0
 
     def get_unit_price(self, obj):
-        return f"{obj.unit_price:.2f}"
+        from apps.promotions.specials import live_unit_price
+
+        return f"{live_unit_price(obj.product, obj):.2f}"
 
     def get_low_stock(self, obj):
         inv = getattr(obj, "inventory", None)
@@ -104,6 +106,7 @@ class ProductListSerializer(serializers.ModelSerializer):
             "brand",
             "category",
             "price",
+            "compare_at",
             "currency",
             "rating",
             "reviews",
@@ -112,7 +115,20 @@ class ProductListSerializer(serializers.ModelSerializer):
             "image_url",
         )
 
+    compare_at = serializers.SerializerMethodField()
+
     def get_price(self, obj):
+        from apps.promotions.specials import flash_for
+
+        flash = flash_for(obj)
+        amount = flash.sale_price if flash else obj.base_price
+        return f"{amount:.2f}"
+
+    def get_compare_at(self, obj):
+        from apps.promotions.specials import flash_for
+
+        if flash_for(obj) is None:
+            return None
         return f"{obj.base_price:.2f}"
 
     def get_rating(self, obj):

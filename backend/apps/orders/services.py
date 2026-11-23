@@ -321,8 +321,10 @@ def cancel_order(order: Order, actor=None, note: str = "Cancelled") -> Order:
             inv.save(update_fields=["quantity"])
     if order.status != Order.Status.AWAITING_PAYMENT:
         from apps.promotions.services import restore_order_discount
+        from apps.promotions.specials import reverse_order_specials
 
         restore_order_discount(order)
+        reverse_order_specials(order)
     return transition_order(
         order, Order.Status.CANCELLED, actor=actor, note=note
     )

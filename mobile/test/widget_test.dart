@@ -22,6 +22,7 @@ void main() {
           productsProvider.overrideWith((ref) async => <Product>[]),
           allProductsProvider.overrideWith((ref) async => <Product>[]),
           promotionsProvider.overrideWith((ref) async => <PromotionOffer>[]),
+          bundlesProvider.overrideWith((ref) async => <ShopBundle>[]),
           adsProvider.overrideWith((ref) async => <ShopAd>[]),
           categoriesProvider.overrideWith((ref) async => kCategories),
           brandsProvider.overrideWith((ref) async => <CatalogueChip>[]),
@@ -60,6 +61,7 @@ void main() {
         overrides: [
           productsProvider.overrideWith((ref) async => <Product>[]),
           promotionsProvider.overrideWith((ref) async => <PromotionOffer>[]),
+          bundlesProvider.overrideWith((ref) async => <ShopBundle>[]),
           adsProvider.overrideWith((ref) async => <ShopAd>[]),
           categoriesProvider.overrideWith((ref) async => kCategories),
           authStateProvider.overrideWith(
@@ -79,6 +81,7 @@ void main() {
         overrides: [
           productsProvider.overrideWith((ref) async => throw Exception('offline')),
           promotionsProvider.overrideWith((ref) async => <PromotionOffer>[]),
+          bundlesProvider.overrideWith((ref) async => <ShopBundle>[]),
           adsProvider.overrideWith((ref) async => <ShopAd>[]),
           categoriesProvider.overrideWith((ref) async => kCategories),
           authStateProvider.overrideWith(
@@ -193,6 +196,7 @@ void main() {
               ),
             ],
           ),
+          bundlesProvider.overrideWith((ref) async => <ShopBundle>[]),
           adsProvider.overrideWith(
             (ref) async => const [
               ShopAd(id: 1, title: 'Trail week', body: 'Walk further.', productId: 3),
@@ -211,8 +215,52 @@ void main() {
     expect(find.text('20% off the trail shop · code DISCOUNT20'), findsOneWidget);
   });
 
+  testWidgets('Shop shows a compare-at price', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          productsProvider.overrideWith(
+            (ref) async => [
+              Product(
+                id: 7,
+                sku: 'NB-RDG45',
+                name: 'Ridgeline 45 Pack',
+                brand: 'Northbound',
+                category: 'packs',
+                price: '249.00',
+                compareAt: '289.00',
+                currency: 'ZAR',
+                rating: 4.5,
+                reviews: 3,
+                hue: 140,
+                soldOut: false,
+              ),
+            ],
+          ),
+          promotionsProvider.overrideWith((ref) async => <PromotionOffer>[]),
+          bundlesProvider.overrideWith((ref) async => <ShopBundle>[]),
+          adsProvider.overrideWith((ref) async => <ShopAd>[]),
+          categoriesProvider.overrideWith((ref) async => kCategories),
+          recentProvider.overrideWith((ref) {
+            final notifier = RecentNotifier(load: false);
+            notifier.state = [7];
+            return notifier;
+          }),
+          authStateProvider.overrideWith(
+            (ref) => AuthNotifier(ref.watch(apiProvider), bootstrap: false),
+          ),
+        ],
+        child: const MaterialApp(home: ShopScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('R 249.00'), findsWidgets);
+    expect(find.byKey(const Key('compare-7')), findsWidgets);
+    expect(find.text('Recently viewed'), findsOneWidget);
+  });
+
   testWidgets('Settings shows the phone field', (tester) async {
-    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.physicalSize = const Size(800, 3200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -254,17 +302,25 @@ void main() {
           ),
           addressesProvider.overrideWith((ref) async => <AddressBookEntry>[]),
           devicesProvider.overrideWith((ref) async => <PushDevice>[]),
+          loyaltyProvider.overrideWith(
+            (ref) async => const LoyaltyStatus(points: 120, referralCode: 'JORDAN'),
+          ),
         ],
         child: const MaterialApp(home: SettingsScreen()),
       ),
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('settings-phone')), findsOneWidget);
+    expect(find.text('120 points'), findsOneWidget);
     expect(find.text('Marketing email'), findsOneWidget);
     expect(find.text('Store settings'), findsNothing);
   });
 
   testWidgets('Store settings is present for staff', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -297,6 +353,8 @@ void main() {
             ],
           ),
           staffAdsProvider.overrideWith((ref) async => const <ShopAd>[]),
+          staffFlashesProvider.overrideWith((ref) async => const <StaffFlash>[]),
+          staffBundlesProvider.overrideWith((ref) async => const <StaffBundle>[]),
           staffPromotionsProvider.overrideWith(
             (ref) async => const [
               StaffPromotion(

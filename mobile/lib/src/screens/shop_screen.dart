@@ -18,6 +18,8 @@ class ShopScreen extends ConsumerWidget {
     final categories = ref.watch(categoriesProvider).valueOrNull ?? kCategories;
     final ads = ref.watch(adsProvider).valueOrNull ?? const <ShopAd>[];
     final promos = ref.watch(promotionsProvider).valueOrNull ?? const <PromotionOffer>[];
+    final bundles = ref.watch(bundlesProvider).valueOrNull ?? const <ShopBundle>[];
+    final recentIds = ref.watch(recentProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -74,25 +76,155 @@ class ShopScreen extends ConsumerWidget {
                     detail: 'Try another category, or check that the API is running.',
                   );
                 }
+                final recent = [
+                  for (final id in recentIds)
+                    for (final product in list)
+                      if (product.id == id) product,
+                ];
                 return RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(productsProvider),
-                  child: GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.72,
-                    ),
-                    itemCount: list.length,
-                    itemBuilder: (_, index) => ProductCard(product: list[index]),
+                  onRefresh: () async {
+                    ref.invalidate(productsProvider);
+                    ref.invalidate(bundlesProvider);
+                  },
+                  child: CustomScrollView(
+                    slivers: [
+                      if (bundles.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: Column(
+                              children: [
+                                for (final bundle in bundles)
+                                  _BundleCard(bundle: bundle),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (recent.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Recently viewed',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  height: 168,
+                                  child: ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: recent.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(width: 10),
+                                    itemBuilder: (_, index) => SizedBox(
+                                      width: 140,
+                                      child: ProductCard(product: recent[index]),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        sliver: SliverGrid(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.68,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            (_, index) => ProductCard(product: list[index]),
+                            childCount: list.length,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _BundleCard extends ConsumerWidget {
+  const _BundleCard({required this.bundle});
+
+  final ShopBundle bundle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sale = bundle.compareAt.isNotEmpty && bundle.compareAt != bundle.price;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(bundle.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            if (bundle.items.isNotEmpty)
+              Text(
+                bundle.items.join(' + '),
+                style: const TextStyle(color: NbColors.mute, fontSize: 12),
+              ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  moneyZar(bundle.price),
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w700,
+                    color: NbColors.forest,
+                  ),
+                ),
+                if (sale)
+                  Text(
+                    moneyZar(bundle.compareAt),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: NbColors.mute,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              key: Key('add-bundle-${bundle.id}'),
+              onPressed: () async {
+                try {
+                  await ref.read(cartProvider.notifier).addBundle(bundle.id);
+                  if (context.mounted) {
+                    showAppMessage(context, '${bundle.title} added to cart');
+                  }
+                } catch (error) {
+                  if (context.mounted) {
+                    showAppMessage(
+                      context,
+                      ref.read(apiProvider).errorMessage(error),
+                    );
+                  }
+                }
+              },
+              child: const Text('Add bundle'),
+            ),
+          ],
+        ),
       ),
     );
   }

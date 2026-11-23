@@ -70,21 +70,50 @@ class ProductCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    moneyZar(product.price),
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.w600,
-                      color: NbColors.forest,
-                      fontSize: 13,
-                    ),
-                  ),
+                  _PriceLine(product: product),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PriceLine extends StatelessWidget {
+  const _PriceLine({required this.product});
+
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) {
+    final sale = product.compareAt.isNotEmpty && product.compareAt != product.price;
+    return Wrap(
+      spacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          moneyZar(product.price),
+          style: const TextStyle(
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.w600,
+            color: NbColors.forest,
+            fontSize: 13,
+          ),
+        ),
+        if (sale)
+          Text(
+            moneyZar(product.compareAt),
+            key: Key('compare-${product.id}'),
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11,
+              color: NbColors.mute,
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
+      ],
     );
   }
 }

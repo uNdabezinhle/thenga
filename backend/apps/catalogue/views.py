@@ -169,8 +169,40 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 </svg>"""
         return HttpResponse(svg, content_type="image/svg+xml")
 
-    @action(detail=True, methods=["get"], url_path="reviews")
+    @action(detail=True, methods=["get", "post"], url_path="reviews")
     def reviews(self, request, pk=None):
         product = self.get_object()
+        if request.method == "POST":
+            if not request.user.is_authenticated:
+                return Response(
+                    {"error": {"code": "authentication_failed", "message": "Sign in to review."}},
+                    status=401,
+                )
+            try:
+                rating = int(request.data.get("rating"))
+            except (TypeError, ValueError):
+                rating = 0
+            body = str(request.data.get("body") or "").strip()
+            if rating < 1 or rating > 5 or not body:
+                return Response(
+                    {"rating": "Choose 1 to 5 stars and write a short review."},
+                    status=400,
+                )
+            who = ""
+            profile = getattr(request.user, "profile", None)
+            if profile is not None:
+                who = profile.display_name
+            review, _ = Review.objects.update_or_create(
+                product=product,
+                user=request.user,
+                defaults={
+                    "rating": rating,
+                    "body": body[:2000],
+                    "title": "",
+                    "author_display": who or request.user.username,
+                    "is_approved": True,
+                },
+            )
+            return Response(ReviewSerializer(review).data)
         qs = product.reviews.filter(is_approved=True)
         return Response(ReviewSerializer(qs, many=True).data)

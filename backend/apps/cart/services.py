@@ -164,6 +164,8 @@ def apply_coupon(cart: Cart, code: str) -> CartDiscount:
     from apps.promotions.services import coupon_is_live, voucher_for_cart
 
     code = code.strip().upper()
+    if cart.items.filter(bundle__isnull=False).exists():
+        raise DiscountAlreadyApplied(detail="Remove the bundle before using a code.")
     if cart.discounts.exists():
         # One active discount per cart — prevents unlimited stacking (F-08).
         raise DiscountAlreadyApplied(

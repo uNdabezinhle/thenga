@@ -83,6 +83,8 @@ class Order(models.Model):
     payment_method = models.CharField(max_length=32, blank=True)
     discount_code = models.CharField(max_length=64, blank=True)
     discount_settled = models.BooleanField(default=False)
+    loyalty_points = models.PositiveIntegerField(default=0)
+    specials_awarded = models.BooleanField(default=False)
     idempotency_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
     placed_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from .models import FlashPrice
 from .models import (
     Brand,
     Category,
@@ -39,6 +40,12 @@ class ProductVariantAdmin(admin.ModelAdmin):
 @admin.register(Inventory)
 class InventoryAdmin(admin.ModelAdmin):
     list_display = ("variant", "quantity", "reserved_quantity", "warehouse")
+
+
+@admin.register(FlashPrice)
+class FlashPriceAdmin(admin.ModelAdmin):
+    list_display = ("product", "sale_price", "starts_at", "ends_at", "is_active")
+    list_filter = ("is_active",)
 
 
 admin.site.register(Category)

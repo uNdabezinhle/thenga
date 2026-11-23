@@ -66,6 +66,7 @@ class Product {
     required this.brand,
     required this.category,
     required this.price,
+    this.compareAt = '',
     required this.currency,
     required this.rating,
     required this.reviews,
@@ -84,6 +85,7 @@ class Product {
   final String brand;
   final String category;
   final String price;
+  final String compareAt;
   final String currency;
   final double rating;
   final int reviews;
@@ -102,6 +104,7 @@ class Product {
         brand: asString(json['brand']),
         category: asString(json['category']),
         price: asString(json['price'], '0.00'),
+        compareAt: asString(json['compare_at']),
         currency: asString(json['currency'], 'ZAR'),
         rating: asDouble(json['rating']),
         reviews: asInt(json['reviews']),
@@ -718,6 +721,105 @@ class ShopAd {
         body: asString(json['body']),
         productId: json['product_id'] == null ? null : asInt(json['product_id']),
         productSlug: asString(json['product_slug']),
+        isActive: json['is_active'] as bool? ?? true,
+      );
+}
+
+class ShopBundle {
+  const ShopBundle({
+    required this.id,
+    required this.title,
+    required this.price,
+    required this.compareAt,
+    required this.isActive,
+    this.items = const [],
+  });
+
+  final int id;
+  final String title;
+  final String price;
+  final String compareAt;
+  final bool isActive;
+  final List<String> items;
+
+  factory ShopBundle.fromJson(Map<String, dynamic> json) => ShopBundle(
+        id: asInt(json['id']),
+        title: asString(json['title']),
+        price: asString(json['price'], '0.00'),
+        compareAt: asString(json['compare_at']),
+        isActive: json['is_active'] as bool? ?? true,
+        items: [
+          for (final row in (json['items'] as List? ?? []))
+            if (row is Map) asString(row['name']),
+        ],
+      );
+}
+
+class LoyaltyStatus {
+  const LoyaltyStatus({
+    required this.points,
+    required this.referralCode,
+    this.referrerCode = '',
+  });
+
+  final int points;
+  final String referralCode;
+  final String referrerCode;
+
+  factory LoyaltyStatus.fromJson(Map<String, dynamic> json) => LoyaltyStatus(
+        points: asInt(json['points']),
+        referralCode: asString(json['referral_code']),
+        referrerCode: asString(json['referrer_code']),
+      );
+}
+
+class StaffFlash {
+  const StaffFlash({
+    required this.id,
+    required this.productName,
+    required this.salePrice,
+    required this.compareAt,
+    required this.isActive,
+    this.startsAt = '',
+    this.endsAt = '',
+  });
+
+  final int id;
+  final String productName;
+  final String salePrice;
+  final String compareAt;
+  final bool isActive;
+  final String startsAt;
+  final String endsAt;
+
+  factory StaffFlash.fromJson(Map<String, dynamic> json) => StaffFlash(
+        id: asInt(json['id']),
+        productName: asString(json['product_name']),
+        salePrice: asString(json['sale_price'], '0.00'),
+        compareAt: asString(json['compare_at']),
+        isActive: json['is_active'] as bool? ?? true,
+        startsAt: asString(json['starts_at']),
+        endsAt: asString(json['ends_at']),
+      );
+}
+
+class StaffBundle {
+  const StaffBundle({
+    required this.id,
+    required this.title,
+    required this.price,
+    required this.isActive,
+  });
+
+  final int id;
+  final String title;
+  final String price;
+  final bool isActive;
+
+  factory StaffBundle.fromJson(Map<String, dynamic> json) => StaffBundle(
+        id: asInt(json['id']),
+        title: asString(json['title']),
+        price: asString(json['price'], '0.00'),
         isActive: json['is_active'] as bool? ?? true,
       );
 }

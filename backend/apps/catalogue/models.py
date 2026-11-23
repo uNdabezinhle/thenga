@@ -146,6 +146,22 @@ class ProductAttribute(models.Model):
         ordering = ["id"]
 
 
+class FlashPrice(models.Model):
+    """A dated sale price that replaces the catalogue base while it is live."""
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="flash_prices")
+    sale_price = models.DecimalField(max_digits=12, decimal_places=2)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self):
+        return f"Flash<{self.product_id}>"
+
+
 class Review(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="reviews")
     user = models.ForeignKey(

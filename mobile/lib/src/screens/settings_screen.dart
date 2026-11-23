@@ -9,6 +9,125 @@ import '../state/providers.dart';
 import '../theme.dart';
 import 'address_book.dart';
 
+class _LoyaltySection extends ConsumerStatefulWidget {
+  const _LoyaltySection();
+
+  @override
+  ConsumerState<_LoyaltySection> createState() => _LoyaltySectionState();
+}
+
+class _LoyaltySectionState extends ConsumerState<_LoyaltySection> {
+  final _code = TextEditingController();
+  String? _voucher;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<void> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+    } catch (error) {
+      if (mounted) {
+        showAppMessage(context, ref.read(apiProvider).errorMessage(error));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loyalty = ref.watch(loyaltyProvider);
+    return loyalty.when(
+      loading: () => const LinearProgressIndicator(),
+      error: (error, _) => Text('$error'),
+      data: (row) {
+        if (row == null) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Points and referrals', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${row.points} points',
+                      key: const Key('loyalty-points'),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Your code ${row.referralCode}',
+                      key: const Key('referral-code'),
+                    ),
+                    if (row.referrerCode.isNotEmpty)
+                      Text(
+                        'Friend code ${row.referrerCode}',
+                        style: const TextStyle(color: NbColors.mute, fontSize: 12),
+                      ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '100 points become a personal R10 voucher.',
+                      style: const TextStyle(color: NbColors.mute, fontSize: 12),
+                    ),
+                    if (_voucher != null) ...[
+                      const SizedBox(height: 8),
+                      Text('Voucher $_voucher', key: const Key('loyalty-voucher')),
+                    ],
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _run(() async {
+                                final res = await ref.read(apiProvider).dio.post(
+                                      '/api/v1/promotions/loyalty/redeem/',
+                                    );
+                                final data = Map<String, dynamic>.from(res.data as Map);
+                                setState(() => _voucher = asString(data['voucher_code']));
+                                ref.invalidate(loyaltyProvider);
+                              }),
+                      child: const Text('Redeem 100 points'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      key: const Key('friend-code'),
+                      controller: _code,
+                      decoration: const InputDecoration(labelText: "Friend's referral code"),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _run(() async {
+                                await ref.read(apiProvider).dio.post(
+                                      '/api/v1/promotions/referrals/',
+                                      data: {'code': _code.text.trim()},
+                                    );
+                                ref.invalidate(loyaltyProvider);
+                                if (mounted) showAppMessage(context, 'Referral saved');
+                              }),
+                      child: const Text('Save referral code'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -57,6 +176,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           if (_error != null) _errorBox(_error!),
+          const _LoyaltySection(),
+          const SizedBox(height: 16),
           const _ProfileEditor(),
           const SizedBox(height: 16),
           const Text('Security', style: TextStyle(fontWeight: FontWeight.w700)),

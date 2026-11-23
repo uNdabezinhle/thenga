@@ -10,16 +10,18 @@ from django.utils.text import slugify
 from apps.accounts.models import MFADevice, Role, User, UserProfile, UserRole
 from apps.cart.models import Coupon
 from apps.orders.couriers import ensure_shipping_rates
-from apps.promotions.models import ShopAd, Voucher
 from apps.catalogue.models import (
     Brand,
     Category,
+    FlashPrice,
     Inventory,
     Product,
     ProductAttribute,
     ProductVariant,
     Review,
 )
+from apps.promotions.models import Bundle, BundleItem, LoyaltyAccount, ShopAd, Voucher
+from apps.promotions.specials import ensure_referral
 
 
 CATALOGUE = [
@@ -390,6 +392,38 @@ class Command(BaseCommand):
                 },
             )
 
+        pack = Product.objects.filter(sku="NB-RDG45").first()
+        shell = Product.objects.filter(sku="NB-STRM").first()
+        if pack is not None:
+            FlashPrice.objects.get_or_create(
+                product=pack,
+                defaults={"sale_price": Decimal("249.00"), "is_active": True},
+            )
+        if pack is not None and shell is not None:
+            pack_variant = (
+                pack.variants.filter(is_active=True, inventory__quantity__gt=0)
+                .order_by("id")
+                .first()
+            )
+            shell_variant = (
+                shell.variants.filter(is_active=True, inventory__quantity__gt=0)
+                .order_by("id")
+                .first()
+            )
+            bundle, made = Bundle.objects.get_or_create(
+                title="Weekend kit",
+                defaults={"price": Decimal("599.00"), "is_active": True},
+            )
+            if made and pack_variant is not None and shell_variant is not None:
+                BundleItem.objects.create(
+                    bundle=bundle, product=pack, variant=pack_variant, quantity=1
+                )
+                BundleItem.objects.create(
+                    bundle=bundle, product=shell, variant=shell_variant, quantity=1
+                )
+        LoyaltyAccount.objects.get_or_create(user=user, defaults={"points": 120})
+        ensure_referral(user)
+
         self.stdout.write(self.style.SUCCESS("Northbound seed complete."))
         self.stdout.write("  Customer: jordan@northbound.test / correct-horse-42 (MFA enrolled)")
         self.stdout.write("  Staff:    staff@northbound.test / staff-ops-42")
@@ -398,3 +432,6 @@ class Command(BaseCommand):
         self.stdout.write("  Coupon:   DISCOUNT20 (20%)")
         self.stdout.write("  Voucher:  TRAIL50 (R50, Jordan only)")
         self.stdout.write("  Ad:       Trail week")
+        self.stdout.write("  Flash:    Ridgeline 45 Pack at R249 while the window is open")
+        self.stdout.write("  Bundle:   Weekend kit at R599")
+        self.stdout.write("  Loyalty:  Jordan starts with 120 points when the account is new")

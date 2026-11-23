@@ -39,6 +39,12 @@ class DiscountAlreadyApplied(RekaAPIException):
     default_detail = "This discount code is already applied."
 
 
+class BundleLocked(RekaAPIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "bundle_locked"
+    default_detail = "Change the bundle from the shop."
+
+
 class CartSessionInvalid(RekaAPIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_code = "cart_session_invalid"

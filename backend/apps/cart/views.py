@@ -66,7 +66,9 @@ class CartViewSet(viewsets.ViewSet):
             )
             resulting = (item.quantity if item else 0) + qty
             assert_stock(product, variant, resulting)
-            price = variant.unit_price if variant else product.base_price
+            from apps.promotions.specials import live_unit_price
+
+            price = live_unit_price(product, variant)
             if item:
                 item.quantity = resulting
                 item.save(update_fields=["quantity"])
@@ -99,6 +101,10 @@ class CartViewSet(viewsets.ViewSet):
                 {"error": {"code": "not_found", "message": "Cart item not found.", "request_id": getattr(request, "request_id", "-")}},
                 status=404,
             )
+        if item.bundle_id:
+            from apps.core.exceptions import BundleLocked
+
+            raise BundleLocked()
         qty = ser.validated_data["quantity"]
         assert_stock(item.product, item.variant, qty)
         item.quantity = qty
@@ -113,7 +119,11 @@ class CartViewSet(viewsets.ViewSet):
     )
     def remove_item(self, request, item_id=None):
         cart = self._cart(request)
-        deleted, _ = CartItem.objects.filter(pk=item_id, cart=cart).delete()
+        item = CartItem.objects.filter(pk=item_id, cart=cart).first()
+        if item is not None and item.bundle_id:
+            CartItem.objects.filter(cart=cart, bundle_id=item.bundle_id).delete()
+        elif item is not None:
+            item.delete()
         # DELETE is idempotent — 204 even if already gone
         cart = cart_queryset().get(pk=cart.pk)
         return Response(CartSerializer(cart).data)
@@ -145,6 +155,10 @@ class CartViewSet(viewsets.ViewSet):
                 {"error": {"code": "not_found", "message": "Cart item not found.", "request_id": getattr(request, "request_id", "-")}},
                 status=404,
             )
+        if item.bundle_id:
+            from apps.core.exceptions import BundleLocked
+
+            raise BundleLocked()
         saved, _ = SavedForLater.objects.update_or_create(
             user=request.user,
             product=item.product,

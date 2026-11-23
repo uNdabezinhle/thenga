@@ -6,6 +6,92 @@ import '../state/providers.dart';
 import '../theme.dart';
 import '../widgets/terrain_art.dart';
 
+class _ReviewBox extends ConsumerStatefulWidget {
+  const _ReviewBox({required this.productId, required this.onPosted});
+
+  final int productId;
+  final Future<void> Function() onPosted;
+
+  @override
+  ConsumerState<_ReviewBox> createState() => _ReviewBoxState();
+}
+
+class _ReviewBoxState extends ConsumerState<_ReviewBox> {
+  final _body = TextEditingController();
+  int _rating = 5;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _body.dispose();
+    super.dispose();
+  }
+
+  Future<void> _post() async {
+    final text = _body.text.trim();
+    if (text.isEmpty) {
+      showAppMessage(context, 'Write a short review.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref.read(apiProvider).dio.post(
+        '/api/v1/products/${widget.productId}/reviews/',
+        data: {'rating': _rating, 'body': text},
+      );
+      _body.clear();
+      await widget.onPosted();
+      if (mounted) showAppMessage(context, 'Review posted');
+    } catch (error) {
+      if (mounted) {
+        showAppMessage(context, ref.read(apiProvider).errorMessage(error));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final signedIn = ref.watch(authStateProvider).valueOrNull?.isSignedIn ?? false;
+    if (!signedIn) {
+      return const Text(
+        'Sign in to review this product.',
+        style: TextStyle(color: NbColors.mute),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          children: [
+            for (var star = 1; star <= 5; star++)
+              ChoiceChip(
+                label: Text('$star'),
+                selected: _rating == star,
+                onSelected: (_) => setState(() => _rating = star),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          key: const Key('review-body'),
+          controller: _body,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(labelText: 'Your review'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: _busy ? null : _post,
+          child: const Text('Post review'),
+        ),
+      ],
+    );
+  }
+}
+
 class ProductScreen extends ConsumerStatefulWidget {
   const ProductScreen({super.key, required this.productId});
   final int productId;
@@ -50,6 +136,7 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
         _variant = variant;
         _loading = false;
       });
+      await ref.read(recentProvider.notifier).remember(product.id);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -145,14 +232,29 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
             style: const TextStyle(color: NbColors.mute),
           ),
           const SizedBox(height: 8),
-          Text(
-            moneyZar(product.price),
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'monospace',
-              color: NbColors.forest,
-            ),
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                moneyZar(product.price),
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'monospace',
+                  color: NbColors.forest,
+                ),
+              ),
+              if (product.compareAt.isNotEmpty && product.compareAt != product.price)
+                Text(
+                  moneyZar(product.compareAt),
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    color: NbColors.mute,
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+            ],
           ),
           if (product.description != null && product.description!.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -240,6 +342,8 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
                   trailing: Text('★' * review.rating.clamp(0, 5)),
                 ),
               ),
+          const SizedBox(height: 8),
+          _ReviewBox(productId: product.id, onPosted: _load),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _busy || variant == null || variant.stock <= 0 ? null : _add,

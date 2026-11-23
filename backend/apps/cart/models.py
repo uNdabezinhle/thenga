@@ -62,6 +62,13 @@ class CartItem(models.Model):
     )
     quantity = models.PositiveSmallIntegerField()
     unit_price_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
+    bundle = models.ForeignKey(
+        "promotions.Bundle",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cart_items",
+    )
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

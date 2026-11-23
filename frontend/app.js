@@ -86,6 +86,12 @@ const S = {
   shippingRates: [],
   staffAds: [],
   staffPromos: [],
+  bundles: [],
+  loyalty: null,
+  loyaltyNote: '',
+  staffFlashes: [],
+  staffBundles: [],
+  recent: store.get('recent') || [],
   products: [],
   categories: [{id:'all', label:'Everything'}],
   cart: null,
@@ -96,7 +102,7 @@ const S = {
   variant: null,
   filters:{q:'', cat:'all', sort:'featured'},
   form:{email:'jordan@northbound.test', password:'correct-horse-42',
-        username:'jordan.m', password2:'correct-horse-42', mfacode:'', code:''},
+        username:'jordan.m', password2:'correct-horse-42', mfacode:'', code:'', referral:''},
   log:[], hits:new Set(), busy:false, snack:null, formErr:null,
   flags:{slow:false},
   checkout:{addr:'14 Harbour Lane, Cape Town 8001', pay:'card'},
@@ -251,11 +257,26 @@ function errMsg(data, fallback='Something went wrong.'){
 }
 
 /* ---------- data loaders ---------- */
+function remember(id){
+  const n = +id;
+  if (!n) return;
+  S.recent = [n, ...S.recent.filter(x => +x !== n)].slice(0, 8);
+  store.set('recent', S.recent);
+}
+
 async function loadMerch(){
   const promos = await api('GET', '/api/v1/promotions/', { path: '/api/v1/promotions/' });
   if (promos.ok) S.promos = (promos.data && promos.data.results) || [];
   const ads = await api('GET', '/api/v1/ads/', { path: '/api/v1/ads/?placement=shop_top' });
   if (ads.ok) S.ads = (ads.data && ads.data.results) || [];
+  const bundles = await api('GET', '/api/v1/promotions/bundles/', { path: '/api/v1/promotions/bundles/' });
+  if (bundles.ok) S.bundles = (bundles.data && bundles.data.results) || [];
+}
+
+async function loadLoyalty(){
+  if (!S.tokens) { S.loyalty = null; return; }
+  const r = await api('GET', '/api/v1/promotions/loyalty/', { path: '/api/v1/promotions/loyalty/' });
+  if (r.ok) S.loyalty = r.data;
 }
 
 function val(id){
@@ -269,6 +290,7 @@ async function loadSettings(){
   S.profile = Array.isArray(rows) ? (rows[0] || null) : null;
   const prefs = await api('GET', '/api/v1/notifications/preferences/', { path: '/api/v1/notifications/preferences/' });
   if (prefs.ok) S.prefs = prefs.data;
+  await loadLoyalty();
 }
 
 async function loadStore(){
@@ -278,6 +300,10 @@ async function loadStore(){
   S.staffAds = (ads.data && ads.data.results) || [];
   const promos = await api('GET', '/api/v1/promotions/staff/', { path: '/api/v1/promotions/staff/' });
   S.staffPromos = (promos.data && promos.data.results) || [];
+  const flashes = await api('GET', '/api/v1/promotions/staff/flashes/', { path: '/api/v1/promotions/staff/flashes/' });
+  S.staffFlashes = (flashes.data && flashes.data.results) || [];
+  const bundles = await api('GET', '/api/v1/promotions/staff/bundles/', { path: '/api/v1/promotions/staff/bundles/' });
+  S.staffBundles = (bundles.data && bundles.data.results) || [];
 }
 
 async function loadInbox(){
@@ -365,6 +391,17 @@ function scShop(){
         ${ad.body ? `<div style="font-size:12.5px;margin-top:4px">${esc(ad.body)}</div>` : ''}
       </button>`).join('')}
       ${(S.promos||[]).slice(0,1).map(p => `<p style="font-size:13px;font-weight:700;margin:0 0 10px">${esc(p.title)} · code <span class="mono">${esc(p.code)}</span></p>`).join('')}
+      ${(S.bundles||[]).map(b => `<div class="card" style="margin-bottom:10px">
+        <b style="font-size:14px">${esc(b.title)}</b>
+        <div class="muted" style="font-size:12px;margin-top:4px">${(b.items||[]).map(i => esc(i.name)).join(' + ')}</div>
+        <div class="pr" style="margin:8px 0">${money(b.price)}${b.compare_at && b.compare_at !== b.price ? `<span style="text-decoration:line-through;color:#8E998F;font-size:12px;margin-left:6px">${money(b.compare_at)}</span>` : ''}</div>
+        <button class="btn sm" data-act="addbundle" data-v="${b.id}">Add bundle</button>
+      </div>`).join('')}
+      ${(() => {
+        const seen = (S.recent||[]).map(id => list.find(p => p.id === id || p.id === +id)).filter(Boolean);
+        if (!seen.length) return '';
+        return `<div class="h2">Recently viewed</div><div class="grid">${seen.map(cardHTML).join('')}</div>`;
+      })()}
       ${list.length ? `<div class="grid">${list.map(cardHTML).join('')}</div>`
         : `<div class="empty"><h3>Loading catalogue…</h3><p class="muted">Connecting to ${esc(API_BASE)}</p></div>`}
       <p class="muted" style="margin-top:18px;text-align:center">${list.length} items · prices include VAT · live API</p>
@@ -380,7 +417,7 @@ function cardHTML(p){
       <div class="br">${esc(p.brand)}</div>
       <div class="nm">${esc(p.name)}</div>
       <div class="row" style="gap:4px;margin-top:5px;color:#C99A2E">${ICO.star}<span style="font-size:11px;color:#6E7B72">${p.rating||0} (${p.reviews||0})</span></div>
-      <div class="pr">${money(p.price)}</div>
+      <div class="pr">${money(p.price)}${p.compare_at && p.compare_at !== p.price ? `<span style="text-decoration:line-through;color:#8E998F;font-size:11px;margin-left:6px;font-weight:500">${money(p.compare_at)}</span>` : ''}</div>
     </div>
   </button>`;
 }
@@ -428,7 +465,7 @@ function scProduct(){
       <h2 style="font-family:'Archivo';font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin:4px 0 8px">${esc(p.name)}</h2>
       <div class="row" style="gap:6px;color:#C99A2E">${ICO.star}<span style="font-size:12.5px;color:var(--ink);font-weight:600">${p.rating||0}</span>
         <span class="muted">${p.reviews||0} reviews</span></div>
-      <div class="mono" style="font-size:24px;font-weight:600;color:var(--forest);margin:12px 0 4px">${money(p.price)}</div>
+      <div class="mono" style="font-size:24px;font-weight:600;color:var(--forest);margin:12px 0 4px">${money(p.price)}${p.compare_at && p.compare_at !== p.price ? `<span style="text-decoration:line-through;color:var(--mute);font-size:14px;margin-left:8px;font-weight:500">${money(p.compare_at)}</span>` : ''}</div>
       <p class="muted" style="margin-top:10px">${esc(p.description||'')}</p>
 
       <div class="h2">Choose an option</div>
@@ -451,6 +488,11 @@ function scProduct(){
           <span style="color:#C99A2E;font-size:11px">${'★'.repeat(r.rating)}</span></div>
         <p class="muted" style="margin-top:6px">${esc(r.body)}</p></div>`).join('')
         : '<p class="muted">No reviews yet.</p>'}
+      ${S.user ? `<div class="card" style="margin-top:10px">
+        <div class="field"><label>Stars</label><input id="review-rating" inputmode="numeric" value="5"></div>
+        <div class="field"><label>Your review</label><textarea id="review-body" rows="3"></textarea></div>
+        <button class="btn sm" data-act="review">Post review</button>
+      </div>` : '<p class="muted" style="margin-top:8px">Sign in to review this product.</p>'}
 
       <div style="height:14px"></div>
       <button class="btn" data-act="add" ${!v || +v.stock===0 || S.busy ? 'disabled':''}>
@@ -811,6 +853,7 @@ function scAuth(){
       <div class="field"><label>Email</label><input id="email" type="email" placeholder="you@example.com" value="${esc(S.form.email)}" autocomplete="off"></div>
       <div class="field"><label>Password</label><input id="password" type="password" placeholder="••••••••" value="${esc(S.form.password)}"></div>
       ${reg ? `<div class="field"><label>Confirm password</label><input id="password2" type="password" placeholder="••••••••" value="${esc(S.form.password2)}"></div>` : ''}
+      ${reg ? `<div class="field"><label>Friend's referral code (optional)</label><input id="referral" value="${esc(S.form.referral||'')}" autocomplete="off"></div>` : ''}
       <button class="btn" data-act="${reg?'register':'login'}" ${S.busy?'disabled':''}>
         ${S.busy?'<span class="spinner"></span> Working':(reg?'Create account':'Sign in')}</button>
 
@@ -842,6 +885,20 @@ function scSettings(){
     <div class="appbar"><button class="iconbtn" data-act="back">${ICO.back}</button>
       <div style="flex:1"><h1>Settings</h1></div></div>
     <div class="body">
+      ${(() => {
+        const loy = S.loyalty || {};
+        return `<div class="h2">Points and referrals</div>
+        <div class="card">
+          <b>${esc(loy.points ?? '—')} points</b>
+          <p class="muted" style="margin:6px 0">Your code <span class="mono">${esc(loy.referral_code||'')}</span></p>
+          ${loy.referrer_code ? `<p class="muted">Friend code <span class="mono">${esc(loy.referrer_code)}</span></p>` : ''}
+          <p class="muted" style="font-size:12px">100 points become a personal R10 voucher.</p>
+          ${S.loyaltyNote ? `<p style="margin:8px 0">Voucher <span class="mono">${esc(S.loyaltyNote)}</span></p>` : ''}
+          <button class="btn sm" data-act="redeem">Redeem 100 points</button>
+          <div class="field" style="margin-top:10px"><label>Friend's referral code</label><input id="set-referral" value="${esc(loy.referrer_code||'')}"></div>
+          <button class="btn sm ghost" data-act="attachreferral">Save referral code</button>
+        </div>`;
+      })()}
       <div class="h2">Profile</div>
       <div class="card">
         <div class="field"><label>First name</label><input id="set-first" value="${esc(p.first_name||'')}"></div>
@@ -923,6 +980,27 @@ function scStore(){
       ${rates || '<p class="muted">No rates yet</p>'}
       <div class="h2">Shop banner</div>
       ${ads || '<p class="muted">No banner yet</p>'}
+      <div class="h2">Flash sale</div>
+      ${(S.staffFlashes||[]).map(f => `<div class="card" style="margin-bottom:8px">
+        <b style="font-size:13px">${esc(f.product_name)}</b>
+        <p class="muted" style="font-size:12px">Catalogue ${money(f.compare_at)}</p>
+        <div class="field"><label>Sale price (ZAR)</label><input id="flash-price-${f.id}" value="${esc(f.sale_price)}"></div>
+        <div class="field"><label>Starts</label><input id="flash-start-${f.id}" placeholder="ISO date" value="${esc(f.starts_at||'')}"></div>
+        <div class="field"><label>Ends</label><input id="flash-end-${f.id}" placeholder="ISO date" value="${esc(f.ends_at||'')}"></div>
+        <div class="between" style="margin-top:8px">
+          <button class="btn sm ghost" data-act="saveflash" data-v="${f.id}">Save flash sale</button>
+          <button class="btn sm ${f.is_active?'lime':'ghost'}" data-act="saveflash" data-v="${f.id}" data-flip="1">${f.is_active?'Active':'Hidden'}</button>
+        </div>
+      </div>`).join('') || '<p class="muted">No flash sale yet</p>'}
+      <div class="h2">Bundle</div>
+      ${(S.staffBundles||[]).map(b => `<div class="card" style="margin-bottom:8px">
+        <div class="field"><label>Title</label><input id="bundle-title-${b.id}" value="${esc(b.title)}"></div>
+        <div class="field"><label>Price (ZAR)</label><input id="bundle-price-${b.id}" value="${esc(b.price)}"></div>
+        <div class="between" style="margin-top:8px">
+          <button class="btn sm ghost" data-act="savebundle" data-v="${b.id}">Save bundle</button>
+          <button class="btn sm ${b.is_active?'lime':'ghost'}" data-act="savebundle" data-v="${b.id}" data-flip="1">${b.is_active?'Active':'Hidden'}</button>
+        </div>
+      </div>`).join('') || '<p class="muted">No bundle yet</p>'}
       <div class="h2">Shared promotion</div>
       ${promos || '<p class="muted">No promotion yet</p>'}
     </div>
@@ -1052,7 +1130,7 @@ async function withBusy(fn){
 }
 
 function captureForm(){
-  ['email','password','password2','username','mfacode','code','q'].forEach(id => {
+  ['email','password','password2','username','mfacode','code','q','referral'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     if (id === 'q') S.filters.q = el.value;
@@ -1118,7 +1196,7 @@ const ACTIONS = {
   async cat(v){ S.filters.cat = v; await loadProducts(); render(); },
   async sort(v){ S.filters.sort = v; await loadProducts(); render(); },
   async clearq(){ S.filters.q = ''; await loadProducts(); render(); },
-  async open(v){ await loadProduct(v); go('product'); },
+  async open(v){ remember(v); await loadProduct(v); go('product'); },
   back(){ go(S.tab); },
   variant(v){ S.variant = (S.product.variants||[]).find(x => String(x.id) === String(v)); render(); },
   wish(v){
@@ -1405,6 +1483,7 @@ const ACTIONS = {
       password: S.form.password,
       password2: S.form.password2,
     };
+    if ((S.form.referral || '').trim()) body.referral_code = S.form.referral.trim();
     const r = await api('POST', '/api/v1/auth/users/', { body });
     if (!r.ok) { S.formErr = errMsg(r.data, 'Could not register.'); return; }
     // Auto-verify in DEBUG when server returns dev_email_token
@@ -1532,6 +1611,7 @@ const ACTIONS = {
     }
     S.user = null; S.tokens = null; S.mfaPending = null;
     S.profile = null; S.prefs = null; S.inbox = [];
+    S.loyalty = null; S.loyaltyNote = '';
     S.cartSession = uuid();
     S.cart = null; S.orders = []; S.saved = [];
     S.authView = 'login';
@@ -1626,6 +1706,98 @@ const ACTIONS = {
       await loadStore();
       await loadMerch();
       snack('Banner saved');
+    });
+  },
+
+  addbundle(v){ withBusy(async () => {
+    const r = await api('POST', '/api/v1/promotions/bundles/' + v + '/add/', {
+      path: '/api/v1/promotions/bundles/' + v + '/add/',
+      body: {},
+    });
+    if (!r.ok) { snack(errMsg(r.data, 'Could not add the bundle')); return; }
+    S.cart = r.data;
+    snack('Bundle added');
+  }); },
+
+  review(){
+    const body = val('review-body').trim();
+    const rating = parseInt(val('review-rating'), 10) || 5;
+    withBusy(async () => {
+      if (!S.product) return;
+      const r = await api('POST', '/api/v1/products/' + S.product.id + '/reviews/', {
+        path: '/api/v1/products/' + S.product.id + '/reviews/',
+        body: { rating, body },
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not post the review')); return; }
+      await loadProduct(S.product.id);
+      snack('Review posted');
+    });
+  },
+
+  redeem(){ withBusy(async () => {
+    const r = await api('POST', '/api/v1/promotions/loyalty/redeem/', {
+      path: '/api/v1/promotions/loyalty/redeem/',
+      body: {},
+    });
+    if (!r.ok) { snack(errMsg(r.data, 'Could not redeem points')); return; }
+    S.loyaltyNote = r.data.voucher_code || '';
+    await loadLoyalty();
+    snack('Voucher ' + S.loyaltyNote);
+  }); },
+
+  attachreferral(){
+    const code = val('set-referral').trim();
+    withBusy(async () => {
+      const r = await api('POST', '/api/v1/promotions/referrals/', {
+        path: '/api/v1/promotions/referrals/',
+        body: { code },
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not save the code')); return; }
+      await loadLoyalty();
+      snack('Referral saved');
+    });
+  },
+
+  saveflash(v, btn){
+    const current = (S.staffFlashes || []).find(row => String(row.id) === String(v));
+    const active = btn && btn.dataset.flip === '1' ? !(current && current.is_active) : !!(current && current.is_active);
+    const start = val('flash-start-' + v).trim();
+    const end = val('flash-end-' + v).trim();
+    const body = {
+      sale_price: val('flash-price-' + v).trim(),
+      is_active: active,
+      starts_at: start || null,
+      ends_at: end || null,
+    };
+    withBusy(async () => {
+      const r = await api('PATCH', '/api/v1/promotions/staff/flashes/' + v + '/', {
+        path: '/api/v1/promotions/staff/flashes/' + v + '/',
+        body,
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not save the flash sale')); return; }
+      await loadStore();
+      await loadProducts();
+      snack('Flash sale saved');
+    });
+  },
+
+  savebundle(v, btn){
+    const current = (S.staffBundles || []).find(row => String(row.id) === String(v));
+    const active = btn && btn.dataset.flip === '1' ? !(current && current.is_active) : !!(current && current.is_active);
+    const body = {
+      title: val('bundle-title-' + v).trim(),
+      price: val('bundle-price-' + v).trim(),
+      is_active: active,
+    };
+    withBusy(async () => {
+      const r = await api('PATCH', '/api/v1/promotions/staff/bundles/' + v + '/', {
+        path: '/api/v1/promotions/staff/bundles/' + v + '/',
+        body,
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not save the bundle')); return; }
+      await loadStore();
+      await loadMerch();
+      snack('Bundle saved');
     });
   },
 

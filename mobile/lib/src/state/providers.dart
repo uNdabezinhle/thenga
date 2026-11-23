@@ -297,8 +297,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthSession>> {
     required String username,
     required String password,
     required String password2,
+    String referralCode = '',
   }) async {
     await _ready;
+    final code = referralCode.trim();
     final res = await _api.dio.post(
       '/api/v1/auth/users/',
       data: {
@@ -306,6 +308,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<AuthSession>> {
         'username': username,
         'password': password,
         'password2': password2,
+        if (code.isNotEmpty) 'referral_code': code,
       },
     );
     final data = Map<String, dynamic>.from(res.data as Map);
@@ -413,6 +416,11 @@ class CartNotifier extends StateNotifier<AsyncValue<CartSnapshot?>> {
     state = AsyncValue.data(
       CartSnapshot.fromJson(Map<String, dynamic>.from(res.data as Map)),
     );
+  }
+
+  Future<void> addBundle(int bundleId) async {
+    final res = await _api.dio.post('/api/v1/promotions/bundles/$bundleId/add/');
+    _store(res);
   }
 
   Future<void> addItem({
@@ -541,6 +549,39 @@ final wishlistProvider =
   return WishlistNotifier();
 });
 
+final recentProvider = StateNotifierProvider<RecentNotifier, List<int>>((ref) {
+  return RecentNotifier();
+});
+
+class RecentNotifier extends StateNotifier<List<int>> {
+  RecentNotifier({bool load = true}) : super(const []) {
+    if (load) _load();
+  }
+
+  static const _key = 'nb_recent';
+  static const _cap = 8;
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getStringList(_key) ?? const [];
+      state = [
+        for (final item in raw)
+          if (int.tryParse(item) != null) int.parse(item),
+      ].take(_cap).toList();
+    } catch (_) {}
+  }
+
+  Future<void> remember(int id) async {
+    final next = [id, ...state.where((item) => item != id)].take(_cap).toList();
+    state = next;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_key, next.map((value) => value.toString()).toList());
+    } catch (_) {}
+  }
+}
+
 class WishlistNotifier extends StateNotifier<Set<int>> {
   WishlistNotifier() : super({}) {
     _load();
@@ -594,6 +635,20 @@ final profileProvider = FutureProvider.autoDispose<UserProfile?>((ref) async {
   return UserProfile.fromJson(rows.first);
 });
 
+final bundlesProvider = FutureProvider<List<ShopBundle>>((ref) async {
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/promotions/bundles/');
+  return jsonMaps(res.data).map(ShopBundle.fromJson).toList();
+});
+
+final loyaltyProvider = FutureProvider.autoDispose<LoyaltyStatus?>((ref) async {
+  final auth = ref.watch(authStateProvider).valueOrNull;
+  if (auth == null || !auth.isSignedIn) return null;
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/promotions/loyalty/');
+  return LoyaltyStatus.fromJson(Map<String, dynamic>.from(res.data as Map));
+});
+
 final promotionsProvider = FutureProvider<List<PromotionOffer>>((ref) async {
   final api = ref.watch(apiProvider);
   final res = await api.dio.get('/api/v1/promotions/');
@@ -638,6 +693,22 @@ final staffAdsProvider = FutureProvider.autoDispose<List<ShopAd>>((ref) async {
   final api = ref.watch(apiProvider);
   final res = await api.dio.get('/api/v1/ads/staff/');
   return jsonMaps(res.data).map(ShopAd.fromJson).toList();
+});
+
+final staffFlashesProvider = FutureProvider.autoDispose<List<StaffFlash>>((ref) async {
+  final auth = ref.watch(authStateProvider).valueOrNull;
+  if (auth?.user?.isStaffOps != true) return [];
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/promotions/staff/flashes/');
+  return jsonMaps(res.data).map(StaffFlash.fromJson).toList();
+});
+
+final staffBundlesProvider = FutureProvider.autoDispose<List<StaffBundle>>((ref) async {
+  final auth = ref.watch(authStateProvider).valueOrNull;
+  if (auth?.user?.isStaffOps != true) return [];
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/promotions/staff/bundles/');
+  return jsonMaps(res.data).map(StaffBundle.fromJson).toList();
 });
 
 final staffPromotionsProvider =

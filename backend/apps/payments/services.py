@@ -127,8 +127,10 @@ def confirm_payment_from_webhook(
         if not order.shipments.exists():
             Shipment.objects.create(order=order, status=Shipment.Status.PENDING)
         from apps.promotions.services import settle_order_discount
+        from apps.promotions.specials import award_order_specials
 
         settle_order_discount(order)
+        award_order_specials(order)
 
     logger.info(
         "payment.confirmed ref=%s order=%s event=%s",

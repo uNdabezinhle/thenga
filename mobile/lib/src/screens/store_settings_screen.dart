@@ -19,6 +19,8 @@ class StoreSettingsScreen extends ConsumerWidget {
     final rates = ref.watch(shippingRatesProvider);
     final ads = ref.watch(staffAdsProvider);
     final promos = ref.watch(staffPromotionsProvider);
+    final flashes = ref.watch(staffFlashesProvider);
+    final bundles = ref.watch(staffBundlesProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Store settings')),
       body: ListView(
@@ -44,6 +46,32 @@ class StoreSettingsScreen extends ConsumerWidget {
                 return const Text('No banner yet', style: TextStyle(color: NbColors.mute));
               }
               return Column(children: [for (final ad in rows) _AdEditor(ad: ad)]);
+            },
+          ),
+          const SizedBox(height: 16),
+          const Text('Flash sale', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          flashes.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (error, _) => Text('$error'),
+            data: (rows) {
+              if (rows.isEmpty) {
+                return const Text('No flash sale yet', style: TextStyle(color: NbColors.mute));
+              }
+              return Column(children: [for (final flash in rows) _FlashEditor(flash: flash)]);
+            },
+          ),
+          const SizedBox(height: 16),
+          const Text('Bundle', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          bundles.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (error, _) => Text('$error'),
+            data: (rows) {
+              if (rows.isEmpty) {
+                return const Text('No bundle yet', style: TextStyle(color: NbColors.mute));
+              }
+              return Column(children: [for (final bundle in rows) _BundleEditor(bundle: bundle)]);
             },
           ),
           const SizedBox(height: 16),
@@ -344,6 +372,187 @@ class _PromoEditorState extends ConsumerState<_PromoEditor> {
                 onPressed: _busy ? null : _save,
                 child: const Text('Save promotion'),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FlashEditor extends ConsumerStatefulWidget {
+  const _FlashEditor({required this.flash});
+
+  final StaffFlash flash;
+
+  @override
+  ConsumerState<_FlashEditor> createState() => _FlashEditorState();
+}
+
+class _FlashEditorState extends ConsumerState<_FlashEditor> {
+  late final TextEditingController _price;
+  late final TextEditingController _starts;
+  late final TextEditingController _ends;
+  late bool _active;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _price = TextEditingController(text: widget.flash.salePrice);
+    _starts = TextEditingController(text: widget.flash.startsAt);
+    _ends = TextEditingController(text: widget.flash.endsAt);
+    _active = widget.flash.isActive;
+  }
+
+  @override
+  void dispose() {
+    _price.dispose();
+    _starts.dispose();
+    _ends.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _busy = true);
+    final api = ref.read(apiProvider);
+    String? when(TextEditingController controller) {
+      final value = controller.text.trim();
+      return value.isEmpty ? null : value;
+    }
+
+    try {
+      await api.dio.patch(
+        '/api/v1/promotions/staff/flashes/${widget.flash.id}/',
+        data: {
+          'sale_price': _price.text.trim(),
+          'is_active': _active,
+          'starts_at': when(_starts),
+          'ends_at': when(_ends),
+        },
+      );
+      ref.invalidate(staffFlashesProvider);
+      ref.invalidate(productsProvider);
+      if (mounted) showAppMessage(context, 'Flash sale saved');
+    } catch (error) {
+      if (mounted) showAppMessage(context, api.errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.flash.productName, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              'Catalogue ${moneyZar(widget.flash.compareAt)}',
+              style: const TextStyle(color: NbColors.mute, fontSize: 12),
+            ),
+            TextField(
+              controller: _price,
+              decoration: const InputDecoration(labelText: 'Sale price (ZAR)'),
+            ),
+            TextField(controller: _starts, decoration: const InputDecoration(labelText: 'Starts')),
+            TextField(controller: _ends, decoration: const InputDecoration(labelText: 'Ends')),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Active'),
+              value: _active,
+              onChanged: (value) => setState(() => _active = value),
+            ),
+            OutlinedButton(
+              onPressed: _busy ? null : _save,
+              child: const Text('Save flash sale'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BundleEditor extends ConsumerStatefulWidget {
+  const _BundleEditor({required this.bundle});
+
+  final StaffBundle bundle;
+
+  @override
+  ConsumerState<_BundleEditor> createState() => _BundleEditorState();
+}
+
+class _BundleEditorState extends ConsumerState<_BundleEditor> {
+  late final TextEditingController _title;
+  late final TextEditingController _price;
+  late bool _active;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _title = TextEditingController(text: widget.bundle.title);
+    _price = TextEditingController(text: widget.bundle.price);
+    _active = widget.bundle.isActive;
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _price.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _busy = true);
+    final api = ref.read(apiProvider);
+    try {
+      await api.dio.patch(
+        '/api/v1/promotions/staff/bundles/${widget.bundle.id}/',
+        data: {
+          'title': _title.text.trim(),
+          'price': _price.text.trim(),
+          'is_active': _active,
+        },
+      );
+      ref.invalidate(staffBundlesProvider);
+      ref.invalidate(bundlesProvider);
+      if (mounted) showAppMessage(context, 'Bundle saved');
+    } catch (error) {
+      if (mounted) showAppMessage(context, api.errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title')),
+            TextField(
+              controller: _price,
+              decoration: const InputDecoration(labelText: 'Price (ZAR)'),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Active'),
+              value: _active,
+              onChanged: (value) => setState(() => _active = value),
+            ),
+            OutlinedButton(
+              onPressed: _busy ? null : _save,
+              child: const Text('Save bundle'),
             ),
           ],
         ),

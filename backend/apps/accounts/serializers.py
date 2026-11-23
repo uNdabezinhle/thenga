@@ -25,8 +25,10 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "email", "username", "password", "password2", "phone_number")
+        fields = ("id", "email", "username", "password", "password2", "phone_number", "referral_code")
         read_only_fields = ("id",)
+
+    referral_code = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     def validate(self, attrs):
         if attrs["password"] != attrs["password2"]:
@@ -39,7 +41,12 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop("password2")
         password = validated_data.pop("password")
+        referral_code = validated_data.pop("referral_code", "")
         user = User.objects.create_user(password=password, **validated_data)
+        if referral_code:
+            from apps.promotions.specials import attach_referrer
+
+            attach_referrer(user, referral_code)
         token = EmailVerificationToken.create_for(user)
         # Attach for DEBUG responses / tests (never log the token in production)
         user._email_verification_token = token.token

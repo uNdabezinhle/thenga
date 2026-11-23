@@ -20,6 +20,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _password = TextEditingController();
   final _username = TextEditingController();
   final _password2 = TextEditingController();
+  final _referral = TextEditingController();
   final _mfa = TextEditingController();
   bool _register = false;
   bool _busy = false;
@@ -31,6 +32,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     _password.dispose();
     _username.dispose();
     _password2.dispose();
+    _referral.dispose();
     _mfa.dispose();
     super.dispose();
   }
@@ -165,6 +167,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Confirm password'),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('register-referral'),
+              controller: _referral,
+              decoration: const InputDecoration(
+                labelText: "Friend's referral code (optional)",
+              ),
+            ),
           ],
           const SizedBox(height: 16),
           FilledButton(
@@ -178,6 +188,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                           username: _username.text.trim(),
                           password: _password.text,
                           password2: _password2.text,
+                          referralCode: _referral.text,
                         );
                       }
                       return auth.login(_email.text.trim(), _password.text);
