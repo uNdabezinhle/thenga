@@ -81,3 +81,23 @@ class NotificationLog(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["-created_at", "template"])]
+
+
+class InAppNotification(models.Model):
+    class Kind(models.TextChoices):
+        ORDER = "order", "Order"
+        PROMOTION = "promotion", "Promotion"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="inbox",
+    )
+    title = models.CharField(max_length=160)
+    body = models.TextField(blank=True)
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.ORDER)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]

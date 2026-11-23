@@ -1,0 +1,5 @@
+FROM nginx:alpine
+
+RUN mkdir -p /var/www/static /var/www/media /var/www/certbot
+COPY mobile/nginx.conf /etc/nginx/conf.d/default.conf
+COPY mobile/build/web /usr/share/nginx/html

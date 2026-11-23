@@ -13,10 +13,15 @@ COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY backend/ /app/
+COPY frontend/ /frontend/
+COPY scripts/docker/entrypoint.sh /entrypoint.sh
 
-RUN useradd -m app && chown -R app:app /app
-USER app
+RUN chmod +x /entrypoint.sh \
+    && useradd -m app \
+    && mkdir -p /app/media /var/www/static /var/lib/celery \
+    && chown -R app:app /app /frontend /var/www/static /var/lib/celery
 
 EXPOSE 8000
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["gunicorn", "reka.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2"]

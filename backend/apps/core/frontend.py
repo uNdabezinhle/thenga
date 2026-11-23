@@ -20,7 +20,10 @@ def spa_index(request):
     # Point the client at same-origin API when served by Django
     html = html.replace(
         "window.REKA_API_BASE || 'http://127.0.0.1:8000'",
-        "window.REKA_API_BASE || ''",
+        "window.REKA_API_BASE ?? ''",
+    ).replace(
+        "window.REKA_API_BASE ?? 'http://127.0.0.1:8000'",
+        "window.REKA_API_BASE ?? ''",
     )
     return HttpResponse(html, content_type="text/html; charset=utf-8")
 

@@ -1,6 +1,16 @@
 from django.contrib import admin
 
-from .models import Address, Order, OrderEvent, OrderItem, Payment, Refund, Shipment
+from .models import (
+    Address,
+    Order,
+    OrderEvent,
+    OrderItem,
+    Payment,
+    Refund,
+    Shipment,
+    ShipmentEvent,
+    ShippingRate,
+)
 
 
 class OrderItemInline(admin.TabularInline):
@@ -33,3 +43,9 @@ admin.site.register(Address)
 admin.site.register(Payment)
 admin.site.register(Refund)
 admin.site.register(Shipment)
+admin.site.register(ShipmentEvent)
+
+
+@admin.register(ShippingRate)
+class ShippingRateAdmin(admin.ModelAdmin):
+    list_display = ("method_name", "price", "estimated_days", "sort_order")

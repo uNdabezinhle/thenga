@@ -227,6 +227,10 @@ class _OrderCard extends ConsumerWidget {
                   ],
                 ),
               ),
+            if (order.shipment != null || order.status == 'packed') ...[
+              const SizedBox(height: 8),
+              ShipmentTracking(shipment: order.shipment),
+            ],
             if (order.awaitingPayment) ...[
               const SizedBox(height: 8),
               FilledButton(
@@ -472,5 +476,66 @@ class InvoiceScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class ShipmentTracking extends StatelessWidget {
+  const ShipmentTracking({super.key, required this.shipment});
+
+  final ShipmentInfo? shipment;
+
+  @override
+  Widget build(BuildContext context) {
+    final booked = shipment?.isBooked ?? false;
+    if (!booked) {
+      return const Text(
+        'Waiting for the courier',
+        key: Key('shipment-waiting'),
+        style: TextStyle(color: NbColors.mute, fontSize: 12),
+      );
+    }
+    final info = shipment!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          info.carrier.isEmpty ? 'Courier' : info.carrier,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          info.trackingNumber,
+          key: const Key('shipment-tracking'),
+          style: const TextStyle(fontFamily: 'monospace'),
+        ),
+        for (final event in info.events)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              [
+                if (formatWhen(event.createdAt).isNotEmpty) formatWhen(event.createdAt),
+                _shipmentLabel(event.status),
+                if (event.note.isNotEmpty) event.note,
+              ].join(' · '),
+              style: const TextStyle(color: NbColors.mute, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+String _shipmentLabel(String status) {
+  switch (status) {
+    case 'dispatched':
+      return 'Dispatched';
+    case 'in_transit':
+      return 'In transit';
+    case 'delivered':
+      return 'Delivered';
+    case 'pending':
+      return 'Waiting for the courier';
+    default:
+      return status;
   }
 }

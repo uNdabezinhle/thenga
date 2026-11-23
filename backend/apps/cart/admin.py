@@ -16,5 +16,9 @@ class CartAdmin(admin.ModelAdmin):
 
 admin.site.register(CartDiscount)
 admin.site.register(ShippingEstimate)
-admin.site.register(Coupon)
 admin.site.register(SavedForLater)
+
+
+@admin.register(Coupon)
+class CouponAdmin(admin.ModelAdmin):
+    list_display = ("code", "title", "discount_type", "amount", "is_active", "times_used")

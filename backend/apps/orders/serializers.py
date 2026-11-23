@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.pricing.services import money_str
 
-from .models import Address, Order, OrderEvent, OrderItem
+from .models import Address, Order, OrderEvent, OrderItem, Shipment, ShipmentEvent
 
 
 class AddressSerializer(serializers.ModelSerializer):
@@ -54,6 +54,27 @@ class OrderEventSerializer(serializers.ModelSerializer):
         fields = ("from_status", "to_status", "note", "created_at")
 
 
+class ShipmentEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShipmentEvent
+        fields = ("status", "note", "created_at")
+
+
+class ShipmentSerializer(serializers.ModelSerializer):
+    events = ShipmentEventSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Shipment
+        fields = (
+            "carrier",
+            "tracking_number",
+            "status",
+            "dispatched_at",
+            "delivered_at",
+            "events",
+        )
+
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     events = OrderEventSerializer(many=True, read_only=True)
@@ -64,6 +85,7 @@ class OrderSerializer(serializers.ModelSerializer):
     tracking_stage = serializers.IntegerField(read_only=True)
     item_count = serializers.SerializerMethodField()
     cooling_off = serializers.SerializerMethodField()
+    shipment = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -83,6 +105,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "item_count",
             "items",
             "events",
+            "shipment",
             "placed_at",
             "cooling_off",
         )
@@ -101,6 +124,12 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_item_count(self, obj):
         return sum(i.quantity for i in obj.items.all())
+
+    def get_shipment(self, obj):
+        shipment = next(iter(obj.shipments.all()), None)
+        if shipment is None:
+            return None
+        return ShipmentSerializer(shipment).data
 
     def get_cooling_off(self, obj):
         from .cooling_off import cooling_off_status

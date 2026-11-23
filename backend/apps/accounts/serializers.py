@@ -84,6 +84,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="user.email", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
     display_name = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=32)
 
     class Meta:
         model = UserProfile
@@ -94,11 +95,26 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "display_name",
             "first_name",
             "last_name",
+            "phone_number",
             "address",
             "date_of_birth",
             "preferences",
         )
         read_only_fields = ("id", "email", "username", "display_name")
+        extra_kwargs = {"date_of_birth": {"allow_null": True, "required": False}}
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["phone_number"] = instance.user.phone_number or ""
+        return data
+
+    def update(self, instance, validated_data):
+        phone = validated_data.pop("phone_number", serializers.empty)
+        profile = super().update(instance, validated_data)
+        if phone is not serializers.empty:
+            instance.user.phone_number = phone or ""
+            instance.user.save(update_fields=["phone_number"])
+        return profile
 
 
 class LoginSerializer(serializers.Serializer):

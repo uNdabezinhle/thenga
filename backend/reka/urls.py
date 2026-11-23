@@ -22,6 +22,8 @@ urlpatterns = [
     path("api/v1/orders/", include("apps.orders.urls")),
     path("api/v1/payments/", include("apps.payments.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
+    path("api/v1/promotions/", include("apps.promotions.urls")),
+    path("api/v1/ads/", include("apps.promotions.ad_urls")),
     # Northbound SPA (local/dev convenience — same origin as API)
     path("", spa_index, name="spa-index"),
     path("app.js", spa_asset, {"path": "app.js"}, name="spa-app-js"),

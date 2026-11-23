@@ -11,7 +11,8 @@ from apps.cart.services import cart_queryset, cart_totals, ensure_shipping_estim
 from apps.catalogue.models import Inventory
 from apps.core.exceptions import CartItemOutOfStock, RekaAPIException
 
-from .models import Address, Order, OrderEvent, OrderItem, Payment, Shipment
+from .couriers import get_courier
+from .models import Address, Order, OrderEvent, OrderItem, Payment, Shipment, ShipmentEvent
 
 
 class OrderError(RekaAPIException):
@@ -112,6 +113,7 @@ def place_order(
         grand_total=totals.grand_total,
         shipping_method=selected.method_name if selected else "",
         payment_method=payment_method,
+        discount_code=(cart.discounts.order_by("id").values_list("code", flat=True).first() or ""),
         idempotency_key=idempotency_key or str(uuid.uuid4()),
     )
 
@@ -178,19 +180,6 @@ def transition_order(order: Order, new_status: str, actor=None, note: str = "") 
         actor=actor,
         note=note,
     )
-    if new_status == Order.Status.OUT_FOR_DELIVERY:
-        shipment = order.shipments.first()
-        if shipment:
-            shipment.status = Shipment.Status.IN_TRANSIT
-            shipment.dispatched_at = timezone.now()
-            shipment.tracking_number = shipment.tracking_number or f"TRK{order.reference[-6:]}"
-            shipment.save()
-    if new_status == Order.Status.DELIVERED:
-        shipment = order.shipments.first()
-        if shipment:
-            shipment.status = Shipment.Status.DELIVERED
-            shipment.delivered_at = timezone.now()
-            shipment.save()
 
     # Push on status change (REKA-FR-NOT-003) — never block the transition
     try:
@@ -218,14 +207,90 @@ def advance_order(order: Order, actor=None) -> Order:
             code="payment_required",
         )
     nxt = stages[idx + 1]
-    order = transition_order(order, nxt, actor=actor, note="Status advanced")
     if nxt == Order.Status.OUT_FOR_DELIVERY:
-        try:
-            from apps.notifications.services import notify_order_dispatched
+        return book_shipment(order, actor=actor)
+    if nxt == Order.Status.DELIVERED:
+        return apply_courier_status(order, Shipment.Status.DELIVERED, actor=actor)
+    return transition_order(order, nxt, actor=actor, note="Status advanced")
 
-            notify_order_dispatched(order)
-        except Exception:
-            pass
+
+@transaction.atomic
+def book_shipment(order: Order, actor=None) -> Order:
+    """Book the configured courier once. A second call returns the same waybill."""
+    order = Order.objects.select_for_update().get(pk=order.pk)
+    shipment = order.shipments.select_for_update().first()
+    if shipment and shipment.tracking_number:
+        return order
+    if order.status != Order.Status.PACKED:
+        raise OrderError(
+            "Pack the order before booking a courier.",
+            code="invalid_transition",
+        )
+    if shipment is None:
+        shipment = Shipment.objects.create(order=order, status=Shipment.Status.PENDING)
+    booking = get_courier().book(order_reference=order.reference)
+    shipment.carrier = booking.carrier
+    shipment.tracking_number = booking.tracking_number
+    shipment.status = Shipment.Status.DISPATCHED
+    shipment.dispatched_at = timezone.now()
+    shipment.save()
+    ShipmentEvent.objects.create(
+        shipment=shipment,
+        status=Shipment.Status.DISPATCHED,
+        note="Booked with the courier",
+    )
+    transition_order(
+        order,
+        Order.Status.OUT_FOR_DELIVERY,
+        actor=actor,
+        note="Courier booked",
+    )
+    try:
+        from apps.notifications.services import notify_order_dispatched
+
+        notify_order_dispatched(order)
+    except Exception:
+        pass
+    order.refresh_from_db()
+    return order
+
+
+@transaction.atomic
+def apply_courier_status(order: Order, status: str, actor=None, note: str = "") -> Order:
+    """Record an in-transit or delivered courier update. Delivered completes the order."""
+    if status not in (Shipment.Status.IN_TRANSIT, Shipment.Status.DELIVERED):
+        raise OrderError("Courier status must be in_transit or delivered.", code="invalid_transition")
+    order = Order.objects.select_for_update().get(pk=order.pk)
+    shipment = order.shipments.select_for_update().first()
+    if shipment is None or not shipment.tracking_number:
+        raise OrderError(
+            "Book the courier before updating tracking.",
+            code="invalid_transition",
+        )
+    rank = {
+        Shipment.Status.PENDING: 0,
+        Shipment.Status.DISPATCHED: 1,
+        Shipment.Status.IN_TRANSIT: 2,
+        Shipment.Status.DELIVERED: 3,
+    }
+    if rank[shipment.status] > rank[status]:
+        raise OrderError(
+            f"Cannot move courier from {shipment.status} to {status}.",
+            code="invalid_transition",
+        )
+    if shipment.status != status:
+        shipment.status = status
+        if status == Shipment.Status.DELIVERED:
+            shipment.delivered_at = timezone.now()
+        shipment.save()
+        ShipmentEvent.objects.create(
+            shipment=shipment,
+            status=status,
+            note=note or "Courier update",
+        )
+    if status == Shipment.Status.DELIVERED and order.can_transition(Order.Status.DELIVERED):
+        transition_order(order, Order.Status.DELIVERED, actor=actor, note="Courier delivered")
+    order.refresh_from_db()
     return order
 
 
@@ -254,6 +319,10 @@ def cancel_order(order: Order, actor=None, note: str = "Cancelled") -> Order:
         else:
             inv.quantity += item.quantity
             inv.save(update_fields=["quantity"])
+    if order.status != Order.Status.AWAITING_PAYMENT:
+        from apps.promotions.services import restore_order_discount
+
+        restore_order_discount(order)
     return transition_order(
         order, Order.Status.CANCELLED, actor=actor, note=note
     )

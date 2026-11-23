@@ -1,9 +1,10 @@
 from django.contrib import admin
 
-from .models import DeviceRegistration, NotificationLog, NotificationPreference
+from .models import DeviceRegistration, InAppNotification, NotificationLog, NotificationPreference
 
 admin.site.register(NotificationPreference)
 admin.site.register(DeviceRegistration)
+admin.site.register(InAppNotification)
 
 
 @admin.register(NotificationLog)

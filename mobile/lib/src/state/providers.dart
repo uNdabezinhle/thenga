@@ -594,6 +594,26 @@ final profileProvider = FutureProvider.autoDispose<UserProfile?>((ref) async {
   return UserProfile.fromJson(rows.first);
 });
 
+final promotionsProvider = FutureProvider<List<PromotionOffer>>((ref) async {
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/promotions/');
+  return jsonMaps(res.data).map(PromotionOffer.fromJson).toList();
+});
+
+final adsProvider = FutureProvider<List<ShopAd>>((ref) async {
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/ads/', queryParameters: {'placement': 'shop_top'});
+  return jsonMaps(res.data).map(ShopAd.fromJson).toList();
+});
+
+final inboxProvider = FutureProvider.autoDispose<List<InboxNote>>((ref) async {
+  final auth = ref.watch(authStateProvider).valueOrNull;
+  if (auth == null || !auth.isSignedIn) return [];
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/notifications/inbox/');
+  return jsonMaps(res.data).map(InboxNote.fromJson).toList();
+});
+
 final notificationPrefsProvider =
     FutureProvider.autoDispose<NotificationPrefs?>((ref) async {
   final auth = ref.watch(authStateProvider).valueOrNull;
@@ -601,6 +621,32 @@ final notificationPrefsProvider =
   final api = ref.watch(apiProvider);
   final res = await api.dio.get('/api/v1/notifications/preferences/');
   return NotificationPrefs.fromJson(Map<String, dynamic>.from(res.data as Map));
+});
+
+final shippingRatesProvider =
+    FutureProvider.autoDispose<List<ShippingRate>>((ref) async {
+  final auth = ref.watch(authStateProvider).valueOrNull;
+  if (auth?.user?.isStaffOps != true) return [];
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/orders/staff/shipping-rates/');
+  return jsonMaps(res.data).map(ShippingRate.fromJson).toList();
+});
+
+final staffAdsProvider = FutureProvider.autoDispose<List<ShopAd>>((ref) async {
+  final auth = ref.watch(authStateProvider).valueOrNull;
+  if (auth?.user?.isStaffOps != true) return [];
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/ads/staff/');
+  return jsonMaps(res.data).map(ShopAd.fromJson).toList();
+});
+
+final staffPromotionsProvider =
+    FutureProvider.autoDispose<List<StaffPromotion>>((ref) async {
+  final auth = ref.watch(authStateProvider).valueOrNull;
+  if (auth?.user?.isStaffOps != true) return [];
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/promotions/staff/');
+  return jsonMaps(res.data).map(StaffPromotion.fromJson).toList();
 });
 
 final devicesProvider = FutureProvider.autoDispose<List<PushDevice>>((ref) async {

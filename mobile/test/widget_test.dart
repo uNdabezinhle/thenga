@@ -6,8 +6,10 @@ import 'package:northbound/src/models/models.dart';
 import 'package:northbound/src/screens/account_screen.dart';
 import 'package:northbound/src/screens/cart_screen.dart';
 import 'package:northbound/src/screens/checkout_screen.dart';
+import 'package:northbound/src/screens/settings_screen.dart';
 import 'package:northbound/src/screens/shop_screen.dart';
 import 'package:northbound/src/screens/staff_screen.dart';
+
 import 'package:northbound/src/state/providers.dart';
 
 import 'support.dart';
@@ -19,6 +21,8 @@ void main() {
         overrides: [
           productsProvider.overrideWith((ref) async => <Product>[]),
           allProductsProvider.overrideWith((ref) async => <Product>[]),
+          promotionsProvider.overrideWith((ref) async => <PromotionOffer>[]),
+          adsProvider.overrideWith((ref) async => <ShopAd>[]),
           categoriesProvider.overrideWith((ref) async => kCategories),
           brandsProvider.overrideWith((ref) async => <CatalogueChip>[]),
           appVersionProvider.overrideWith(
@@ -55,6 +59,8 @@ void main() {
       ProviderScope(
         overrides: [
           productsProvider.overrideWith((ref) async => <Product>[]),
+          promotionsProvider.overrideWith((ref) async => <PromotionOffer>[]),
+          adsProvider.overrideWith((ref) async => <ShopAd>[]),
           categoriesProvider.overrideWith((ref) async => kCategories),
           authStateProvider.overrideWith(
             (ref) => AuthNotifier(ref.watch(apiProvider), bootstrap: false),
@@ -72,6 +78,8 @@ void main() {
       ProviderScope(
         overrides: [
           productsProvider.overrideWith((ref) async => throw Exception('offline')),
+          promotionsProvider.overrideWith((ref) async => <PromotionOffer>[]),
+          adsProvider.overrideWith((ref) async => <ShopAd>[]),
           categoriesProvider.overrideWith((ref) async => kCategories),
           authStateProvider.overrideWith(
             (ref) => AuthNotifier(ref.watch(apiProvider), bootstrap: false),
@@ -167,5 +175,149 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('staff-gate')), findsOneWidget);
     expect(find.text('Staff only'), findsOneWidget);
+  });
+
+  testWidgets('Shop shows the banner and promotion', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          productsProvider.overrideWith((ref) async => <Product>[]),
+          promotionsProvider.overrideWith(
+            (ref) async => const [
+              PromotionOffer(
+                code: 'DISCOUNT20',
+                title: '20% off the trail shop',
+                description: '',
+                discountType: 'percentage',
+                amount: '20.00',
+              ),
+            ],
+          ),
+          adsProvider.overrideWith(
+            (ref) async => const [
+              ShopAd(id: 1, title: 'Trail week', body: 'Walk further.', productId: 3),
+            ],
+          ),
+          categoriesProvider.overrideWith((ref) async => kCategories),
+          authStateProvider.overrideWith(
+            (ref) => AuthNotifier(ref.watch(apiProvider), bootstrap: false),
+          ),
+        ],
+        child: const MaterialApp(home: ShopScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Trail week'), findsOneWidget);
+    expect(find.text('20% off the trail shop · code DISCOUNT20'), findsOneWidget);
+  });
+
+  testWidgets('Settings shows the phone field', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith((ref) {
+            final notifier = AuthNotifier(ref.watch(apiProvider), bootstrap: false);
+            notifier.state = AsyncData(
+              AuthSession(
+                user: UserMe(
+                  id: 1,
+                  email: 'jordan@northbound.test',
+                  username: 'jordan',
+                  emailVerified: true,
+                  isStaffOps: false,
+                ),
+              ),
+            );
+            return notifier;
+          }),
+          profileProvider.overrideWith(
+            (ref) async => const UserProfile(
+              id: 1,
+              displayName: 'Jordan',
+              firstName: 'Jordan',
+              lastName: 'Mabaso',
+              address: '14 Harbour Lane',
+              phoneNumber: '0825550101',
+            ),
+          ),
+          notificationPrefsProvider.overrideWith(
+            (ref) async => const NotificationPrefs(
+              emailTransactional: true,
+              emailMarketing: false,
+              pushOrderUpdates: true,
+              pushMarketing: false,
+            ),
+          ),
+          addressesProvider.overrideWith((ref) async => <AddressBookEntry>[]),
+          devicesProvider.overrideWith((ref) async => <PushDevice>[]),
+        ],
+        child: const MaterialApp(home: SettingsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-phone')), findsOneWidget);
+    expect(find.text('Marketing email'), findsOneWidget);
+    expect(find.text('Store settings'), findsNothing);
+  });
+
+  testWidgets('Store settings is present for staff', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith((ref) {
+            final notifier = AuthNotifier(ref.watch(apiProvider), bootstrap: false);
+            notifier.state = AsyncData(
+              AuthSession(
+                user: UserMe(
+                  id: 2,
+                  email: 'staff@northbound.test',
+                  username: 'staff',
+                  emailVerified: true,
+                  isStaffOps: true,
+                ),
+              ),
+            );
+            return notifier;
+          }),
+          reconProvider.overrideWith((ref) async => null),
+          staffOrdersProvider.overrideWith((ref) async => <OrderSummary>[]),
+          refundsProvider.overrideWith((ref) async => <RefundRow>[]),
+          shippingRatesProvider.overrideWith(
+            (ref) async => const [
+              ShippingRate(
+                id: 1,
+                methodName: 'Express',
+                price: '14.50',
+                estimatedDays: '2 days',
+              ),
+            ],
+          ),
+          staffAdsProvider.overrideWith((ref) async => const <ShopAd>[]),
+          staffPromotionsProvider.overrideWith(
+            (ref) async => const [
+              StaffPromotion(
+                code: 'DISCOUNT20',
+                title: '20% off',
+                description: '',
+                discountType: 'percentage',
+                amount: '20.00',
+                isActive: true,
+              ),
+            ],
+          ),
+        ],
+        child: const MaterialApp(home: StaffScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('store-settings')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('store-settings')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delivery'), findsOneWidget);
+    expect(find.text('Shared promotion'), findsOneWidget);
   });
 }

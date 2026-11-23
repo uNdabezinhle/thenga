@@ -120,6 +120,10 @@ class Coupon(models.Model):
     )
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     is_active = models.BooleanField(default=True)
+    title = models.CharField(max_length=120, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
     max_uses = models.PositiveIntegerField(null=True, blank=True)
     times_used = models.PositiveIntegerField(default=0)
 

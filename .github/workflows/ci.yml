@@ -65,3 +65,11 @@ jobs:
           python manage.py test
           apps.pricing apps.accounts apps.cart apps.orders
           apps.payments apps.notifications -v 1
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: docker compose build

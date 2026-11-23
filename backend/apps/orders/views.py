@@ -45,7 +45,7 @@ class OrderViewSet(
             return Order.objects.none()
         return (
             Order.objects.filter(user=self.request.user)
-            .prefetch_related("items", "events", "shipments")
+            .prefetch_related("items", "events", "shipments__events")
         )
 
     def create(self, request):

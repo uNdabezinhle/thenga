@@ -1,15 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
 import '../state/providers.dart';
 import '../theme.dart';
-import 'address_book.dart';
 import 'orders_screen.dart';
 import 'password_reset_screen.dart';
+import 'settings_screen.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -24,8 +21,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _username = TextEditingController();
   final _password2 = TextEditingController();
   final _mfa = TextEditingController();
-  final _currentPassword = TextEditingController();
-  final _newPassword = TextEditingController();
   bool _register = false;
   bool _busy = false;
   String? _error;
@@ -37,8 +32,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     _username.dispose();
     _password2.dispose();
     _mfa.dispose();
-    _currentPassword.dispose();
-    _newPassword.dispose();
     super.dispose();
   }
 
@@ -303,114 +296,19 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             ),
           ),
           const _SessionCard(),
-          const SizedBox(height: 8),
-          const _ProfileEditor(),
-          const SizedBox(height: 16),
-          const Text('Security', style: TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Two-factor authentication',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            Text(
-                              'Authenticator app',
-                              style: TextStyle(color: NbColors.mute, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      session.mfaEnabled
-                          ? OutlinedButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _run(
-                                        () => ref.read(authStateProvider.notifier).disableMfa(),
-                                      ),
-                              child: const Text('Turn off'),
-                            )
-                          : FilledButton(
-                              onPressed: _busy ? null : _setupMfa,
-                              child: const Text('Turn on'),
-                            ),
-                    ],
-                  ),
-                  if (session.mfaEnabled) ...[
-                    const Divider(),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            session.backupCodes.isEmpty
-                                ? 'No backup codes yet'
-                                : '${session.backupCodes.length} backup codes',
-                          ),
-                        ),
-                        OutlinedButton(
-                          onPressed: _busy
-                              ? null
-                              : () => _run(
-                                    () => ref
-                                        .read(authStateProvider.notifier)
-                                        .generateBackupCodes(),
-                                  ),
-                          child: const Text('Generate'),
-                        ),
-                      ],
-                    ),
-                    if (session.backupCodes.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 6,
-                          children: [
-                            for (final code in session.backupCodes)
-                              Text(code, style: const TextStyle(fontFamily: 'monospace')),
-                          ],
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
+          ListTile(
+            key: const Key('open-settings'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Settings'),
+            subtitle: const Text('Profile, security, addresses, notifications'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _currentPassword,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'Current password'),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _newPassword,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: 'New password'),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton(
-              onPressed: _busy ? null : _changePassword,
-              child: const Text('Change password'),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const AddressBookSection(),
-          const SizedBox(height: 16),
-          const _NotificationSection(),
-          const SizedBox(height: 8),
-          const _DeviceSection(),
+          const _InboxSection(),
           const SizedBox(height: 8),
           ListTile(
             title: const Text('Order history'),
@@ -436,39 +334,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     );
   }
 
-  Future<void> _setupMfa() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final secret = await ref.read(authStateProvider.notifier).setupMfa();
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Authenticator registered'),
-          content: SelectableText(
-            'Secret, shown once:\n$secret',
-            style: const TextStyle(fontFamily: 'monospace'),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
-            ),
-          ],
-        ),
-      );
-    } catch (error) {
-      if (mounted) {
-        setState(() => _error = ref.read(apiProvider).errorMessage(error));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   String _orderCountLabel(WidgetRef ref) {
     final orders = ref.watch(ordersProvider);
     return orders.when(
@@ -476,30 +341,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       loading: () => 'Loading orders',
       error: (_, __) => 'Orders',
     );
-  }
-
-  Future<void> _changePassword() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final api = ref.read(apiProvider);
-    try {
-      await api.dio.post(
-        '/api/v1/auth/users/change_password/',
-        data: {
-          'current_password': _currentPassword.text,
-          'new_password': _newPassword.text,
-        },
-      );
-      _currentPassword.clear();
-      _newPassword.clear();
-      if (mounted) showAppMessage(context, 'Password updated');
-    } catch (error) {
-      if (mounted) setState(() => _error = api.errorMessage(error));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Widget _errorBox(String message) {
@@ -549,216 +390,50 @@ class _SessionCard extends ConsumerWidget {
   }
 }
 
-class _ProfileEditor extends ConsumerStatefulWidget {
-  const _ProfileEditor();
-
-  @override
-  ConsumerState<_ProfileEditor> createState() => _ProfileEditorState();
-}
-
-class _ProfileEditorState extends ConsumerState<_ProfileEditor> {
-  final _first = TextEditingController();
-  final _last = TextEditingController();
-  final _address = TextEditingController();
-  int? _loadedId;
-  bool _busy = false;
-
-  @override
-  void dispose() {
-    _first.dispose();
-    _last.dispose();
-    _address.dispose();
-    super.dispose();
-  }
-
-  void _fill(UserProfile profile) {
-    if (_loadedId == profile.id) return;
-    _loadedId = profile.id;
-    _first.text = profile.firstName;
-    _last.text = profile.lastName;
-    _address.text = profile.address;
-  }
-
-  Future<void> _save(UserProfile profile) async {
-    setState(() => _busy = true);
-    final api = ref.read(apiProvider);
-    try {
-      await api.dio.patch(
-        '/api/v1/auth/profiles/${profile.id}/',
-        data: {
-          'first_name': _first.text.trim(),
-          'last_name': _last.text.trim(),
-          'address': _address.text.trim(),
-        },
-      );
-      ref.invalidate(profileProvider);
-      await ref.read(authStateProvider.notifier).refreshMe();
-      if (mounted) showAppMessage(context, 'Profile saved');
-    } catch (error) {
-      if (mounted) showAppMessage(context, api.errorMessage(error));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final profile = ref.watch(profileProvider);
-    return profile.when(
-      loading: () => const LinearProgressIndicator(),
-      error: (error, _) => Text('$error'),
-      data: (row) {
-        if (row == null) return const SizedBox.shrink();
-        _fill(row);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Profile', style: TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            TextField(controller: _first, decoration: const InputDecoration(labelText: 'First name')),
-            TextField(controller: _last, decoration: const InputDecoration(labelText: 'Last name')),
-            TextField(controller: _address, decoration: const InputDecoration(labelText: 'Address')),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _busy ? null : () => _save(row),
-              child: const Text('Save profile'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _NotificationSection extends ConsumerWidget {
-  const _NotificationSection();
-
-  Future<void> _toggle(BuildContext context, WidgetRef ref, Map<String, dynamic> body) async {
-    final api = ref.read(apiProvider);
-    try {
-      await api.dio.patch('/api/v1/notifications/preferences/', data: body);
-      ref.invalidate(notificationPrefsProvider);
-    } catch (error) {
-      if (context.mounted) showAppMessage(context, api.errorMessage(error));
-    }
-  }
+class _InboxSection extends ConsumerWidget {
+  const _InboxSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final prefs = ref.watch(notificationPrefsProvider);
-    return prefs.when(
+    final inbox = ref.watch(inboxProvider);
+    return inbox.when(
       loading: () => const SizedBox.shrink(),
       error: (error, _) => Text('$error'),
-      data: (row) {
-        if (row == null) return const SizedBox.shrink();
+      data: (notes) {
+        if (notes.isEmpty) {
+          return const Text(
+            'No messages yet',
+            style: TextStyle(color: NbColors.mute, fontSize: 12),
+          );
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Notifications', style: TextStyle(fontWeight: FontWeight.w700)),
-            const SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('Order emails'),
-              subtitle: Text('Required'),
-              value: true,
-              onChanged: null,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Marketing email'),
-              value: row.emailMarketing,
-              onChanged: (value) => _toggle(context, ref, {'email_marketing': value}),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Order push'),
-              value: row.pushOrderUpdates,
-              onChanged: (value) => _toggle(context, ref, {'push_order_updates': value}),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Marketing push'),
-              value: row.pushMarketing,
-              onChanged: (value) => _toggle(context, ref, {'push_marketing': value}),
-            ),
+            for (final note in notes)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(note.title),
+                subtitle: Text(note.body),
+                trailing: note.read
+                    ? null
+                    : const Icon(Icons.circle, size: 10, color: NbColors.forest),
+                onTap: note.read
+                    ? null
+                    : () async {
+                        final api = ref.read(apiProvider);
+                        try {
+                          await api.dio.post('/api/v1/notifications/inbox/${note.id}/read/');
+                          ref.invalidate(inboxProvider);
+                        } catch (error) {
+                          if (context.mounted) {
+                            showAppMessage(context, api.errorMessage(error));
+                          }
+                        }
+                      },
+              ),
           ],
         );
       },
-    );
-  }
-}
-
-class _DeviceSection extends ConsumerWidget {
-  const _DeviceSection();
-
-  String get _platform {
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'android';
-      case TargetPlatform.iOS:
-        return 'ios';
-      default:
-        return 'web';
-    }
-  }
-
-  Future<void> _register(WidgetRef ref) async {
-    final api = ref.read(apiProvider);
-    final prefs = await SharedPreferences.getInstance();
-    var token = prefs.getString('nb_push_token');
-    if (token == null || token.isEmpty) {
-      token = const Uuid().v4();
-      await prefs.setString('nb_push_token', token);
-    }
-    await api.dio.post(
-      '/api/v1/notifications/devices/',
-      data: {'token': token, 'platform': _platform},
-    );
-    ref.invalidate(devicesProvider);
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final devices = ref.watch(devicesProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('This device', style: TextStyle(fontWeight: FontWeight.w700)),
-        devices.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (error, _) => Text('$error'),
-          data: (rows) => Column(
-            children: [
-              if (rows.isEmpty)
-                const Text('Not registered for push.', style: TextStyle(color: NbColors.mute)),
-              for (final device in rows)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(device.platform),
-                  subtitle: Text(
-                    device.token,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                  ),
-                  trailing: IconButton(
-                    tooltip: 'Remove',
-                    onPressed: () async {
-                      await ref.read(apiProvider).dio.delete(
-                            '/api/v1/notifications/devices/${device.id}/',
-                          );
-                      ref.invalidate(devicesProvider);
-                    },
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        OutlinedButton(
-          onPressed: () => _register(ref),
-          child: const Text('Register this device'),
-        ),
-      ],
     );
   }
 }

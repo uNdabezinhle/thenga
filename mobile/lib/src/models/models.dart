@@ -448,6 +448,50 @@ class OrderEvent {
       );
 }
 
+class ShipmentUpdate {
+  const ShipmentUpdate({
+    required this.status,
+    required this.note,
+    required this.createdAt,
+  });
+
+  final String status;
+  final String note;
+  final String createdAt;
+
+  factory ShipmentUpdate.fromJson(Map<String, dynamic> json) => ShipmentUpdate(
+        status: asString(json['status']),
+        note: asString(json['note']),
+        createdAt: asString(json['created_at']),
+      );
+}
+
+class ShipmentInfo {
+  const ShipmentInfo({
+    required this.carrier,
+    required this.trackingNumber,
+    required this.status,
+    this.events = const [],
+  });
+
+  final String carrier;
+  final String trackingNumber;
+  final String status;
+  final List<ShipmentUpdate> events;
+
+  bool get isBooked => trackingNumber.isNotEmpty;
+
+  factory ShipmentInfo.fromJson(Map<String, dynamic> json) => ShipmentInfo(
+        carrier: asString(json['carrier']),
+        trackingNumber: asString(json['tracking_number']),
+        status: asString(json['status']),
+        events: (json['events'] as List? ?? [])
+            .whereType<Map>()
+            .map((row) => ShipmentUpdate.fromJson(Map<String, dynamic>.from(row)))
+            .toList(),
+      );
+}
+
 class OrderSummary {
   OrderSummary({
     required this.reference,
@@ -465,6 +509,7 @@ class OrderSummary {
     this.coolingOff = const CoolingOff(eligible: false, daysRemaining: 0),
     this.lines = const [],
     this.events = const [],
+    this.shipment,
   });
 
   final String reference;
@@ -482,6 +527,7 @@ class OrderSummary {
   final CoolingOff coolingOff;
   final List<OrderLine> lines;
   final List<OrderEvent> events;
+  final ShipmentInfo? shipment;
 
   bool get awaitingPayment => status == 'awaiting_payment';
   bool get isClosed => status == 'cancelled' || status == 'refunded';
@@ -519,6 +565,9 @@ class OrderSummary {
           .whereType<Map>()
           .map((row) => OrderEvent.fromJson(Map<String, dynamic>.from(row)))
           .toList(),
+      shipment: json['shipment'] is Map
+          ? ShipmentInfo.fromJson(Map<String, dynamic>.from(json['shipment'] as Map))
+          : null,
     );
   }
 }
@@ -597,6 +646,8 @@ class UserProfile {
     required this.firstName,
     required this.lastName,
     required this.address,
+    this.phoneNumber = '',
+    this.dateOfBirth = '',
   });
 
   final int id;
@@ -604,6 +655,8 @@ class UserProfile {
   final String firstName;
   final String lastName;
   final String address;
+  final String phoneNumber;
+  final String dateOfBirth;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
         id: asInt(json['id']),
@@ -611,6 +664,142 @@ class UserProfile {
         firstName: asString(json['first_name']),
         lastName: asString(json['last_name']),
         address: asString(json['address']),
+        phoneNumber: asString(json['phone_number']),
+        dateOfBirth: asString(json['date_of_birth']),
+      );
+}
+
+class PromotionOffer {
+  const PromotionOffer({
+    required this.code,
+    required this.title,
+    required this.description,
+    required this.discountType,
+    required this.amount,
+  });
+
+  final String code;
+  final String title;
+  final String description;
+  final String discountType;
+  final String amount;
+
+  String get label => discountType == 'percentage' ? '$amount% off' : 'R$amount off';
+
+  factory PromotionOffer.fromJson(Map<String, dynamic> json) => PromotionOffer(
+        code: asString(json['code']),
+        title: asString(json['title']),
+        description: asString(json['description']),
+        discountType: asString(json['discount_type']),
+        amount: asString(json['amount'], '0.00'),
+      );
+}
+
+class ShopAd {
+  const ShopAd({
+    required this.id,
+    required this.title,
+    required this.body,
+    this.productId,
+    this.productSlug = '',
+    this.isActive = true,
+  });
+
+  final int id;
+  final String title;
+  final String body;
+  final int? productId;
+  final String productSlug;
+  final bool isActive;
+
+  factory ShopAd.fromJson(Map<String, dynamic> json) => ShopAd(
+        id: asInt(json['id']),
+        title: asString(json['title']),
+        body: asString(json['body']),
+        productId: json['product_id'] == null ? null : asInt(json['product_id']),
+        productSlug: asString(json['product_slug']),
+        isActive: json['is_active'] as bool? ?? true,
+      );
+}
+
+class ShippingRate {
+  const ShippingRate({
+    required this.id,
+    required this.methodName,
+    required this.price,
+    required this.estimatedDays,
+  });
+
+  final int id;
+  final String methodName;
+  final String price;
+  final String estimatedDays;
+
+  factory ShippingRate.fromJson(Map<String, dynamic> json) => ShippingRate(
+        id: asInt(json['id']),
+        methodName: asString(json['method_name']),
+        price: asString(json['price'], '0.00'),
+        estimatedDays: asString(json['estimated_days']),
+      );
+}
+
+class StaffPromotion {
+  const StaffPromotion({
+    required this.code,
+    required this.title,
+    required this.description,
+    required this.discountType,
+    required this.amount,
+    required this.isActive,
+    this.startsAt = '',
+    this.endsAt = '',
+  });
+
+  final String code;
+  final String title;
+  final String description;
+  final String discountType;
+  final String amount;
+  final bool isActive;
+  final String startsAt;
+  final String endsAt;
+
+  factory StaffPromotion.fromJson(Map<String, dynamic> json) => StaffPromotion(
+        code: asString(json['code']),
+        title: asString(json['title']),
+        description: asString(json['description']),
+        discountType: asString(json['discount_type']),
+        amount: asString(json['amount'], '0.00'),
+        isActive: json['is_active'] as bool? ?? true,
+        startsAt: asString(json['starts_at']),
+        endsAt: asString(json['ends_at']),
+      );
+}
+
+class InboxNote {
+  const InboxNote({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.kind,
+    required this.read,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String title;
+  final String body;
+  final String kind;
+  final bool read;
+  final String createdAt;
+
+  factory InboxNote.fromJson(Map<String, dynamic> json) => InboxNote(
+        id: asInt(json['id']),
+        title: asString(json['title']),
+        body: asString(json['body']),
+        kind: asString(json['kind']),
+        read: json['read'] as bool? ?? false,
+        createdAt: asString(json['created_at']),
       );
 }
 

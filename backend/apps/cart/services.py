@@ -52,13 +52,11 @@ def ensure_shipping_estimates(cart: Cart) -> list[ShippingEstimate]:
     existing = list(cart.shipping_estimates.all())
     if existing:
         return existing
-    defaults = [
-        ("Standard", Decimal("0.00"), "5 – 7 days"),
-        ("Express", Decimal("14.50"), "2 days"),
-        ("Next day", Decimal("29.00"), "Tomorrow before 12:00"),
-    ]
+    from apps.orders.couriers import get_courier
+
     created = []
-    for i, (name, price, days) in enumerate(defaults):
+    for i, quote in enumerate(get_courier().quote()):
+        name, price, days = quote.method_name, quote.price, quote.estimated_days
         created.append(
             ShippingEstimate.objects.create(
                 cart=cart,
@@ -163,6 +161,7 @@ def merge_carts(user, session_id: str) -> Cart:
 
 def apply_coupon(cart: Cart, code: str) -> CartDiscount:
     from apps.core.exceptions import DiscountAlreadyApplied, DiscountCodeInvalid
+    from apps.promotions.services import coupon_is_live, voucher_for_cart
 
     code = code.strip().upper()
     if cart.discounts.exists():
@@ -172,13 +171,22 @@ def apply_coupon(cart: Cart, code: str) -> CartDiscount:
         )
     if cart.discounts.filter(code=code).exists():
         raise DiscountAlreadyApplied()
-    try:
-        coupon = Coupon.objects.get(code__iexact=code, is_active=True)
-    except Coupon.DoesNotExist:
+    coupon = Coupon.objects.filter(code__iexact=code).first()
+    if coupon is not None:
+        if not coupon_is_live(coupon):
+            raise DiscountCodeInvalid()
+        return CartDiscount.objects.create(
+            cart=cart,
+            code=coupon.code,
+            discount_type=coupon.discount_type,
+            amount=coupon.amount,
+        )
+    voucher = voucher_for_cart(cart, code)
+    if voucher is None:
         raise DiscountCodeInvalid()
     return CartDiscount.objects.create(
         cart=cart,
-        code=coupon.code,
-        discount_type=coupon.discount_type,
-        amount=coupon.amount,
+        code=voucher.code,
+        discount_type=CartDiscount.DiscountType.FIXED,
+        amount=voucher.remaining_amount,
     )

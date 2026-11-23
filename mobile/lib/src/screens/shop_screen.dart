@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/models.dart';
+import '../screens/product_screen.dart';
 import '../state/providers.dart';
 import '../theme.dart';
 import '../widgets/product_card.dart';
@@ -14,6 +16,8 @@ class ShopScreen extends ConsumerWidget {
     final user = ref.watch(authStateProvider).valueOrNull?.user;
     final query = ref.watch(catalogueQueryProvider);
     final categories = ref.watch(categoriesProvider).valueOrNull ?? kCategories;
+    final ads = ref.watch(adsProvider).valueOrNull ?? const <ShopAd>[];
+    final promos = ref.watch(promotionsProvider).valueOrNull ?? const <PromotionOffer>[];
 
     return Scaffold(
       appBar: AppBar(
@@ -45,6 +49,16 @@ class ShopScreen extends ConsumerWidget {
               },
             ),
           ),
+          if (ads.isNotEmpty) ShopBanner(ad: ads.first),
+          if (promos.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                '${promos.first.title} · code ${promos.first.code}',
+                key: const Key('shop-promotion'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
           Expanded(
             child: products.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -79,6 +93,55 @@ class ShopScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class ShopBanner extends StatelessWidget {
+  const ShopBanner({super.key, required this.ad});
+
+  final ShopAd ad;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Material(
+        color: NbColors.forest,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          key: const Key('shop-ad'),
+          borderRadius: BorderRadius.circular(14),
+          onTap: ad.productId == null
+              ? null
+              : () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ProductScreen(productId: ad.productId!),
+                    ),
+                  );
+                },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ad.title,
+                  style: const TextStyle(
+                    color: NbColors.lime,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (ad.body.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(ad.body, style: const TextStyle(color: Colors.white)),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

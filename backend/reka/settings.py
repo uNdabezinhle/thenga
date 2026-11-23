@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.pricing",
     "apps.notifications",
+    "apps.promotions",
 ]
 
 MIDDLEWARE = [
@@ -130,9 +131,9 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = Path(os.getenv("STATIC_ROOT", BASE_DIR / "staticfiles"))
 MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", BASE_DIR / "media"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -260,6 +261,8 @@ PAYMENT_WEBHOOK_SECRET = os.getenv(
 PUBLIC_API_BASE = os.getenv("PUBLIC_API_BASE", "http://127.0.0.1:8000")
 # sandbox | payfast — card/EFT hosted provider
 PAYMENT_PROVIDER = os.getenv("PAYMENT_PROVIDER", "sandbox").lower()
+# sandbox — local waybills. An unknown name fails when the orders app loads.
+COURIER_PROVIDER = os.getenv("COURIER_PROVIDER", "sandbox").lower()
 PAYFAST_MERCHANT_ID = os.getenv("PAYFAST_MERCHANT_ID", "")
 PAYFAST_MERCHANT_KEY = os.getenv("PAYFAST_MERCHANT_KEY", "")
 PAYFAST_PASSPHRASE = os.getenv("PAYFAST_PASSPHRASE", "")
@@ -277,6 +280,11 @@ SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "false").lower() in (
 )
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 

@@ -50,17 +50,29 @@ Coupon: **`DISCOUNT20`** (20% off subtotal).
 
 ## Docker Compose
 
+Docker Desktop is required. Android and iOS builds are not part of this stack; use the Flutter SDK on the host for those.
+
 ```bash
 docker compose up --build
 ```
 
 | Service | URL |
 |---|---|
-| API + SPA | http://localhost:8000/ |
-| Swagger | http://localhost:8000/api/docs/ |
-| Client (nginx) | http://localhost:3000 |
+| Flutter web | http://localhost:8080 |
+| Phone demo | http://localhost:3000 |
+| API, Swagger, admin | http://localhost:8000/ |
 | Mailpit | http://localhost:8025 |
 | Postgres | localhost:5432 (`reka` / `reka`) |
+
+The dev stack migrates and seeds demo data. Postgres keeps its data until `docker compose down -v`.
+
+Production uses the same images, does not seed, and does not publish Postgres or Redis:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+Flutter is on port 80. The phone demo stays on port 3000.
 
 ## API surface
 
@@ -233,10 +245,12 @@ ADR-0002 Flutter app lives in [`mobile/`](mobile/):
 # terminal 1 — API
 .\scripts\dev.ps1 run
 
-# terminal 2 — Flutter (Chrome)
+# terminal 2 — Flutter (Chrome), for hot reload
 cd mobile
 flutter run -d chrome --dart-define=REKA_API_BASE=http://127.0.0.1:8000
 ```
+
+`docker compose up` also serves a built Flutter web app at http://localhost:8080. Rebuild the `flutter` image after Dart changes.
 
 See [`mobile/README.md`](mobile/README.md). OpenAPI: [`openapi.yaml`](openapi.yaml)  
 Regenerate: `cd backend && python manage.py spectacular --file ../openapi.yaml`

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../state/providers.dart';
 import '../theme.dart';
+import 'store_settings_screen.dart';
 
 class StaffScreen extends ConsumerWidget {
   const StaffScreen({super.key});
@@ -69,6 +70,18 @@ class StaffScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          ListTile(
+            key: const Key('store-settings'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Store settings'),
+            subtitle: const Text('Delivery, banner, and promotion'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StoreSettingsScreen()),
+              );
+            },
+          ),
           recon.when(
             loading: () => const LinearProgressIndicator(),
             error: (error, _) => Text('$error'),
@@ -251,6 +264,13 @@ class _StaffOrder extends ConsumerWidget {
               '${order.status} · ${order.itemCount} items · ${order.paymentMethod}',
               style: const TextStyle(color: NbColors.mute, fontSize: 12),
             ),
+            if (order.shipment != null && order.shipment!.isBooked) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${order.shipment!.carrier} · ${order.shipment!.trackingNumber}',
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 8),
             if (order.awaitingPayment)
               const Text(
@@ -266,10 +286,21 @@ class _StaffOrder extends ConsumerWidget {
               Wrap(
                 spacing: 8,
                 children: [
-                  OutlinedButton(
-                    onPressed: () => _advance(context, ref),
-                    child: const Text('Advance'),
-                  ),
+                  if (order.status == 'packed')
+                    OutlinedButton(
+                      onPressed: () => _dispatch(context, ref),
+                      child: const Text('Dispatch'),
+                    )
+                  else if (order.status == 'out_for_delivery')
+                    OutlinedButton(
+                      onPressed: () => _courier(context, ref),
+                      child: Text(_courierLabel(order)),
+                    )
+                  else
+                    OutlinedButton(
+                      onPressed: () => _advance(context, ref),
+                      child: const Text('Advance'),
+                    ),
                   OutlinedButton(
                     onPressed: () => _refund(context, ref),
                     child: const Text('Refund'),
@@ -280,6 +311,39 @@ class _StaffOrder extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String _courierLabel(OrderSummary order) {
+    final status = order.shipment?.status ?? '';
+    if (status == 'dispatched' || status.isEmpty) return 'Mark in transit';
+    return 'Mark delivered';
+  }
+
+  Future<void> _dispatch(BuildContext context, WidgetRef ref) async {
+    final api = ref.read(apiProvider);
+    try {
+      await api.dio.post('/api/v1/orders/staff/${order.reference}/dispatch/');
+      ref.invalidate(staffOrdersProvider);
+      if (context.mounted) showAppMessage(context, '${order.reference} dispatched');
+    } catch (error) {
+      if (context.mounted) showAppMessage(context, api.errorMessage(error));
+    }
+  }
+
+  Future<void> _courier(BuildContext context, WidgetRef ref) async {
+    final api = ref.read(apiProvider);
+    final current = order.shipment?.status ?? '';
+    final next = current == 'in_transit' ? 'delivered' : 'in_transit';
+    try {
+      await api.dio.post(
+        '/api/v1/orders/staff/${order.reference}/courier/',
+        data: {'status': next},
+      );
+      ref.invalidate(staffOrdersProvider);
+      if (context.mounted) showAppMessage(context, '${order.reference} $next');
+    } catch (error) {
+      if (context.mounted) showAppMessage(context, api.errorMessage(error));
+    }
   }
 
   Future<void> _advance(BuildContext context, WidgetRef ref) async {

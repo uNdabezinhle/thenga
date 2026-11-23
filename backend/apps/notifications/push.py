@@ -144,6 +144,12 @@ def notify_order_status_push(order) -> list[NotificationLog]:
     }
     title = titles.get(order.status, "Order update")
     body = f"{brand} order {order.reference} is now {order.status.replace('_', ' ')}."
+    try:
+        from apps.notifications.inbox import record_order_notice
+
+        record_order_notice(order)
+    except Exception:
+        logger.exception("inbox.order_notice failed order=%s", order.reference)
     return send_push_to_user(
         order.user,
         title=title,

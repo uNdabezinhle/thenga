@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 
-const API_BASE = (window.REKA_API_BASE || 'http://127.0.0.1:8000').replace(/\/$/, '');
+const API_BASE = (window.REKA_API_BASE ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
 const APP_VERSION = '1.0.0 (build 1)';
 
 const I = (d) => `<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -78,6 +78,14 @@ const S = {
   mfaPending: null,
   preAuthToken: null,
   cartSession: store.get('cartSession') || uuid(),
+  promos: [],
+  ads: [],
+  inbox: [],
+  profile: null,
+  prefs: null,
+  shippingRates: [],
+  staffAds: [],
+  staffPromos: [],
   products: [],
   categories: [{id:'all', label:'Everything'}],
   cart: null,
@@ -243,6 +251,41 @@ function errMsg(data, fallback='Something went wrong.'){
 }
 
 /* ---------- data loaders ---------- */
+async function loadMerch(){
+  const promos = await api('GET', '/api/v1/promotions/', { path: '/api/v1/promotions/' });
+  if (promos.ok) S.promos = (promos.data && promos.data.results) || [];
+  const ads = await api('GET', '/api/v1/ads/', { path: '/api/v1/ads/?placement=shop_top' });
+  if (ads.ok) S.ads = (ads.data && ads.data.results) || [];
+}
+
+function val(id){
+  const el = document.getElementById(id);
+  return el ? el.value : '';
+}
+
+async function loadSettings(){
+  const prof = await api('GET', '/api/v1/auth/profiles/', { path: '/api/v1/auth/profiles/' });
+  const rows = prof.data && (prof.data.results || prof.data);
+  S.profile = Array.isArray(rows) ? (rows[0] || null) : null;
+  const prefs = await api('GET', '/api/v1/notifications/preferences/', { path: '/api/v1/notifications/preferences/' });
+  if (prefs.ok) S.prefs = prefs.data;
+}
+
+async function loadStore(){
+  const rates = await api('GET', '/api/v1/orders/staff/shipping-rates/', { path: '/api/v1/orders/staff/shipping-rates/' });
+  S.shippingRates = (rates.data && rates.data.results) || [];
+  const ads = await api('GET', '/api/v1/ads/staff/', { path: '/api/v1/ads/staff/' });
+  S.staffAds = (ads.data && ads.data.results) || [];
+  const promos = await api('GET', '/api/v1/promotions/staff/', { path: '/api/v1/promotions/staff/' });
+  S.staffPromos = (promos.data && promos.data.results) || [];
+}
+
+async function loadInbox(){
+  if (!S.tokens) { S.inbox = []; return; }
+  const r = await api('GET', '/api/v1/notifications/inbox/', { path: '/api/v1/notifications/inbox/' });
+  if (r.ok) S.inbox = (r.data && r.data.results) || [];
+}
+
 async function loadProducts(){
   const q = new URLSearchParams();
   if (S.filters.cat && S.filters.cat !== 'all') q.set('category', S.filters.cat);
@@ -317,6 +360,11 @@ function scShop(){
       <div class="chips">
         ${S.categories.map(c => `<button class="chip ${S.filters.cat===c.id?'on':''}" data-act="cat" data-v="${c.id}">${c.label}</button>`).join('')}
       </div>
+      ${(S.ads||[]).slice(0,1).map(ad => `<button class="card" style="width:100%;text-align:left;margin-bottom:10px;background:var(--forest);color:#fff" data-act="open" data-v="${ad.product_id||''}">
+        <b style="color:var(--lime)">${esc(ad.title)}</b>
+        ${ad.body ? `<div style="font-size:12.5px;margin-top:4px">${esc(ad.body)}</div>` : ''}
+      </button>`).join('')}
+      ${(S.promos||[]).slice(0,1).map(p => `<p style="font-size:13px;font-weight:700;margin:0 0 10px">${esc(p.title)} · code <span class="mono">${esc(p.code)}</span></p>`).join('')}
       ${list.length ? `<div class="grid">${list.map(cardHTML).join('')}</div>`
         : `<div class="empty"><h3>Loading catalogue…</h3><p class="muted">Connecting to ${esc(API_BASE)}</p></div>`}
       <p class="muted" style="margin-top:18px;text-align:center">${list.length} items · prices include VAT · live API</p>
@@ -558,6 +606,20 @@ function scCheckout(){
   </div>`;
 }
 
+function shipmentLine(o){
+  const ship = o.shipment;
+  if (ship && ship.tracking_number) {
+    const events = (ship.events || []).map(ev =>
+      `<div class="muted" style="font-size:11px">${esc(ev.status)}${ev.note ? ' · ' + esc(ev.note) : ''}</div>`
+    ).join('');
+    return `<p style="font-size:12.5px;margin:8px 0 0"><b>${esc(ship.carrier || 'Courier')}</b> · <span class="mono">${esc(ship.tracking_number)}</span></p>${events}`;
+  }
+  if (o.status === 'packed') {
+    return `<p class="muted" style="font-size:12px;margin:8px 0 0">Waiting for the courier</p>`;
+  }
+  return '';
+}
+
 function scOrders(){
   return `
   <div class="screen">
@@ -578,6 +640,7 @@ function scOrders(){
               ${ix===stage?`<div class="muted" style="font-size:11px">Current status</div>`:''}
             </div>`).join('')}
         </div>
+        ${shipmentLine(o)}
         ${awaiting ? `<button class="btn sm lime" style="width:100%;margin-bottom:8px" data-act="payorder" data-v="${esc(o.reference)}">Complete sandbox payment</button>` : ''}
         ${!awaiting && o.status !== 'cancelled' && o.status !== 'refunded' ? `<button class="btn ghost sm" style="width:100%;margin-bottom:8px" data-act="invoice" data-v="${esc(o.reference)}">View tax invoice</button>` : ''}
         ${o.cooling_off && o.cooling_off.eligible ? `<button class="btn ghost sm" style="width:100%;margin-bottom:8px;color:#9B3B1E" data-act="coolingoff" data-v="${esc(o.reference)}">Exercise 7-day cooling-off</button>
@@ -608,22 +671,11 @@ function scProfile(){
         </div>
       </div>
 
-      <div class="h2">Security</div>
-      <div class="card">
-        <div class="between">
-          <div class="row" style="gap:10px;color:var(--forest)">${ICO.shield}
-            <div><b style="font-size:13.5px">Two-factor authentication</b>
-            <div class="muted" style="font-size:11.5px">${S.user.mfa ? 'Authenticator app · active' : 'Not set up'}</div></div></div>
-          <button class="btn sm ${S.user.mfa?'ghost':'lime'}" data-act="togglemfa">${S.user.mfa?'Turn off':'Turn on'}</button>
-        </div>
-        ${S.user.mfa ? `<div class="hr"></div>
-          <div class="between"><div class="row" style="gap:10px;color:var(--forest)">${ICO.key}
-            <div><b style="font-size:13.5px">Backup codes</b>
-            <div class="muted" style="font-size:11.5px">${S.user.backup ? S.user.backup.length + ' unused codes' : 'None generated'}</div></div></div>
-            <button class="btn sm ghost" data-act="backupcodes">Generate</button></div>
-          ${S.user.backup ? `<div class="mono" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:11px;font-size:12px;
-            background:var(--paper);padding:11px;border-radius:9px">${S.user.backup.map(c => `<span>${c}</span>`).join('')}</div>` : ''}` : ''}
-      </div>
+      <button class="card between" style="width:100%;text-align:left;margin-top:14px" data-act="settings">
+        <span><b style="font-size:13.5px">Settings</b>
+        <span class="muted" style="display:block;font-size:11.5px">Profile, security, notifications</span></span>
+        <span style="color:var(--mute)">${ICO.chev}</span>
+      </button>
 
       <div class="h2">Session</div>
       <div class="card kvs" style="font-size:11.5px">
@@ -632,6 +684,12 @@ function scProfile(){
         <div class="between" style="padding:5px 0"><span class="muted">Cart session header</span><span class="mono">${esc(S.cartSession.slice(0,13))}…</span></div>
         <div class="between" style="padding:5px 0"><span class="muted">API</span><span class="mono">${esc(API_BASE)}</span></div>
       </div>
+
+      <div class="h2">Inbox</div>
+      ${(S.inbox||[]).length ? S.inbox.map(n => `<div class="card" style="margin-bottom:8px">
+        <b style="font-size:13px">${esc(n.title)}</b>
+        <div class="muted" style="font-size:12px;margin-top:3px">${esc(n.body||'')}</div>
+      </div>`).join('') : `<p class="muted" style="font-size:12px">No messages yet</p>`}
 
       <div class="h2">Orders</div>
       <button class="card between" style="width:100%;text-align:left" data-act="tab" data-v="orders">
@@ -673,6 +731,11 @@ function scStaff(){
       <button class="iconbtn" data-act="staffrefresh" aria-label="Refresh">${ICO.search}</button>
     </div>
     <div class="body">
+      <button class="card between" style="width:100%;text-align:left;margin-bottom:14px" data-act="store">
+        <span><b style="font-size:13.5px">Store settings</b>
+        <span class="muted" style="display:block;font-size:11.5px">Delivery, banner, and promotion</span></span>
+        <span style="color:var(--mute)">${ICO.chev}</span>
+      </button>
       ${recon ? `<div class="card" style="margin-bottom:14px">
         <div class="between"><b style="font-size:13px">Today’s recon</b>
           <span class="mono" style="font-size:11px;color:var(--mute)">${esc(recon.date)}</span></div>
@@ -697,9 +760,14 @@ function scStaff(){
           <div class="between"><b class="mono" style="font-size:12px">${esc(o.reference)}</b>
             <span class="mono" style="font-size:12px;font-weight:600">${money(o.grand_total)}</span></div>
           <div class="muted" style="font-size:11px;margin:4px 0 10px">${esc(o.status)} · ${o.item_count||0} items · ${esc(o.payment_method||'')}</div>
+          ${shipmentLine(o)}
           <div class="row" style="gap:6px;flex-wrap:wrap">
             ${!awaiting && o.status !== 'refunded' && o.status !== 'cancelled' ? `
-              <button class="btn sm ghost" data-act="staffadvance" data-v="${esc(o.reference)}">Advance</button>
+              ${o.status === 'packed'
+                ? `<button class="btn sm ghost" data-act="staffdispatch" data-v="${esc(o.reference)}">Dispatch</button>`
+                : o.status === 'out_for_delivery'
+                  ? `<button class="btn sm ghost" data-act="staffcourier" data-v="${esc(o.reference)}" data-status="${(o.shipment&&o.shipment.status)==='in_transit'?'delivered':'in_transit'}">${(o.shipment&&o.shipment.status)==='in_transit'?'Mark delivered':'Mark in transit'}</button>`
+                  : `<button class="btn sm ghost" data-act="staffadvance" data-v="${esc(o.reference)}">Advance</button>`}
               <button class="btn sm ghost" data-act="staffrefund" data-v="${esc(o.reference)}">Refund</button>
             ` : ''}
             ${awaiting ? `<span class="muted" style="font-size:11px">Awaiting customer payment</span>` : ''}
@@ -761,8 +829,109 @@ function scAuth(){
   </div>`;
 }
 
+function scSettings(){
+  if (!S.user) return scAuth();
+  const p = S.profile || {};
+  const prefs = S.prefs || {};
+  const sw = (key, label) => `<div class="between" style="padding:6px 0">
+      <span style="font-size:13px">${label}</span>
+      <button class="btn sm ${prefs[key]?'lime':'ghost'}" data-act="pref" data-v="${key}">${prefs[key]?'On':'Off'}</button>
+    </div>`;
+  return `
+  <div class="screen">
+    <div class="appbar"><button class="iconbtn" data-act="back">${ICO.back}</button>
+      <div style="flex:1"><h1>Settings</h1></div></div>
+    <div class="body">
+      <div class="h2">Profile</div>
+      <div class="card">
+        <div class="field"><label>First name</label><input id="set-first" value="${esc(p.first_name||'')}"></div>
+        <div class="field"><label>Last name</label><input id="set-last" value="${esc(p.last_name||'')}"></div>
+        <div class="field"><label>Phone</label><input id="set-phone" value="${esc(p.phone_number||'')}"></div>
+        <div class="field"><label>Date of birth</label><input id="set-dob" placeholder="YYYY-MM-DD" value="${esc(p.date_of_birth||'')}"></div>
+        <div class="field"><label>Address</label><input id="set-address" value="${esc(p.address||'')}"></div>
+        <button class="btn sm" data-act="saveprofile">Save profile</button>
+      </div>
+      <div class="h2">Security</div>
+      <div class="card">
+        <div class="between">
+          <div class="row" style="gap:10px;color:var(--forest)">${ICO.shield}
+            <div><b style="font-size:13.5px">Two-factor authentication</b>
+            <div class="muted" style="font-size:11.5px">${S.user.mfa ? 'Authenticator app · active' : 'Not set up'}</div></div></div>
+          <button class="btn sm ${S.user.mfa?'ghost':'lime'}" data-act="togglemfa">${S.user.mfa?'Turn off':'Turn on'}</button>
+        </div>
+        ${S.user.mfa ? `<div class="hr"></div>
+          <div class="between"><div class="row" style="gap:10px;color:var(--forest)">${ICO.key}
+            <div><b style="font-size:13.5px">Backup codes</b>
+            <div class="muted" style="font-size:11.5px">${S.user.backup ? S.user.backup.length + ' unused codes' : 'None generated'}</div></div></div>
+            <button class="btn sm ghost" data-act="backupcodes">Generate</button></div>
+          ${S.user.backup ? `<div class="mono" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:11px;font-size:12px;
+            background:var(--paper);padding:11px;border-radius:9px">${S.user.backup.map(c => `<span>${c}</span>`).join('')}</div>` : ''}` : ''}
+        <div class="hr"></div>
+        <div class="field"><label>Current password</label><input id="set-current" type="password"></div>
+        <div class="field"><label>New password</label><input id="set-new" type="password"></div>
+        <button class="btn sm ghost" data-act="changepassword">Change password</button>
+      </div>
+      <div class="h2">Notifications</div>
+      <div class="card">
+        <div class="between" style="padding:6px 0"><span style="font-size:13px">Order emails</span><span class="muted">Required</span></div>
+        ${sw('email_marketing','Marketing email')}
+        ${sw('push_order_updates','Order push')}
+        ${sw('push_marketing','Marketing push')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function scStore(){
+  if (!S.user || !S.user.is_staff_ops) {
+    return `<div class="screen"><div class="appbar"><button class="iconbtn" data-act="back">${ICO.back}</button><div style="flex:1"><h1>Store settings</h1></div></div>
+      <div class="empty"><h3>Staff only</h3></div></div>`;
+  }
+  const rates = (S.shippingRates||[]).map(r => `<div class="card" style="margin-bottom:8px">
+      <b style="font-size:13px">${esc(r.method_name)}</b>
+      <div class="field"><label>Price (ZAR)</label><input id="rate-price-${r.id}" value="${esc(r.price)}"></div>
+      <div class="field"><label>Days</label><input id="rate-days-${r.id}" value="${esc(r.estimated_days)}"></div>
+      <button class="btn sm ghost" data-act="saverate" data-v="${r.id}">Save delivery</button>
+    </div>`).join('');
+  const ads = (S.staffAds||[]).map(a => `<div class="card" style="margin-bottom:8px">
+      <div class="field"><label>Title</label><input id="ad-title-${a.id}" value="${esc(a.title)}"></div>
+      <div class="field"><label>Body</label><input id="ad-body-${a.id}" value="${esc(a.body||'')}"></div>
+      <div class="field"><label>Product slug</label><input id="ad-slug-${a.id}" value="${esc(a.product_slug||'')}"></div>
+      <div class="between" style="margin-top:8px">
+        <button class="btn sm ghost" data-act="savead" data-v="${a.id}">Save banner</button>
+        <button class="btn sm ${a.is_active?'lime':'ghost'}" data-act="savead" data-v="${a.id}" data-flip="1">${a.is_active?'Active':'Hidden'}</button>
+      </div>
+    </div>`).join('');
+  const promos = (S.staffPromos||[]).map(p => `<div class="card" style="margin-bottom:8px">
+      <b style="font-size:13px">${esc(p.code)}</b>
+      <div class="field"><label>Title</label><input id="promo-title-${esc(p.code)}" value="${esc(p.title||'')}"></div>
+      <div class="field"><label>Description</label><input id="promo-body-${esc(p.code)}" value="${esc(p.description||'')}"></div>
+      <div class="field"><label>${p.discount_type==='percentage'?'Percent':'Amount (ZAR)'}</label><input id="promo-amount-${esc(p.code)}" value="${esc(p.amount)}"></div>
+      <div class="field"><label>Starts</label><input id="promo-start-${esc(p.code)}" placeholder="ISO date" value="${esc(p.starts_at||'')}"></div>
+      <div class="field"><label>Ends</label><input id="promo-end-${esc(p.code)}" placeholder="ISO date" value="${esc(p.ends_at||'')}"></div>
+      <div class="between" style="margin-top:8px">
+        <button class="btn sm ghost" data-act="savepromo" data-v="${esc(p.code)}">Save promotion</button>
+        <button class="btn sm ${p.is_active?'lime':'ghost'}" data-act="savepromo" data-v="${esc(p.code)}" data-flip="1">${p.is_active?'Active':'Hidden'}</button>
+      </div>
+    </div>`).join('');
+  return `
+  <div class="screen">
+    <div class="appbar"><button class="iconbtn" data-act="back">${ICO.back}</button>
+      <div style="flex:1"><h1>Store settings</h1></div></div>
+    <div class="body">
+      <div class="h2">Delivery</div>
+      ${rates || '<p class="muted">No rates yet</p>'}
+      <div class="h2">Shop banner</div>
+      ${ads || '<p class="muted">No banner yet</p>'}
+      <div class="h2">Shared promotion</div>
+      ${promos || '<p class="muted">No promotion yet</p>'}
+    </div>
+  </div>`;
+}
+
 const SCREENS = {shop:scShop, search:scSearch, product:scProduct, cart:scCart,
-                 saved:scSaved, checkout:scCheckout, orders:scOrders, profile:scProfile, staff:scStaff};
+                 saved:scSaved, checkout:scCheckout, orders:scOrders, profile:scProfile, staff:scStaff,
+                 settings:scSettings, store:scStore};
 const NAV = [
   {k:'shop',   l:'Shop',    i:'shop'},
   {k:'search', l:'Search',  i:'search'},
@@ -921,6 +1090,7 @@ async function finishLogin(tokens, profile){
   await loadCart();
   await loadOrders();
   await loadSaved();
+  await loadInbox();
   if (S.user.is_staff_ops) {
     await loadStaffOrders();
     await loadRecon();
@@ -1143,6 +1313,30 @@ const ACTIONS = {
     render();
   }); },
 
+  staffdispatch(v){ withBusy(async () => {
+    const r = await api('POST', '/api/v1/orders/staff/{id}/dispatch/', {
+      path: `/api/v1/orders/staff/${v}/dispatch/`,
+      body: {},
+    });
+    if (r.ok) {
+      await loadStaffOrders();
+      const tracking = r.data.shipment && r.data.shipment.tracking_number;
+      snack(tracking ? (v + ' · ' + tracking) : (v + ' dispatched'));
+    } else snack(errMsg(r.data));
+  }); },
+
+  staffcourier(v, el){ withBusy(async () => {
+    const status = (el && el.dataset && el.dataset.status) || 'in_transit';
+    const r = await api('POST', '/api/v1/orders/staff/{id}/courier/', {
+      path: `/api/v1/orders/staff/${v}/courier/`,
+      body: { status },
+    });
+    if (r.ok) {
+      await loadStaffOrders();
+      snack(v + ' → ' + status);
+    } else snack(errMsg(r.data));
+  }); },
+
   staffadvance(v){ withBusy(async () => {
     const r = await api('POST', '/api/v1/orders/staff/{id}/advance/', {
       path: `/api/v1/orders/staff/${v}/advance/`,
@@ -1337,6 +1531,7 @@ const ACTIONS = {
       await api('POST', '/api/v1/auth/logout/', { path: '/api/v1/auth/logout/', body: { refresh: S.tokens.refresh } });
     }
     S.user = null; S.tokens = null; S.mfaPending = null;
+    S.profile = null; S.prefs = null; S.inbox = [];
     S.cartSession = uuid();
     S.cart = null; S.orders = []; S.saved = [];
     S.authView = 'login';
@@ -1350,6 +1545,114 @@ const ACTIONS = {
   expand(v){ const k = String(v); S.expanded.has(k) ? S.expanded.delete(k) : S.expanded.add(k); renderConsole(); },
   clearlog(){ S.log = []; S.expanded.clear(); renderConsole(); },
   flag(v){ S.flags[v] = !S.flags[v]; render(); },
+
+  settings(){ withBusy(async () => { await loadSettings(); go('settings'); }); },
+  store(){ withBusy(async () => { await loadStore(); go('store'); }); },
+
+  saveprofile(){
+    const id = S.profile && S.profile.id;
+    const dob = val('set-dob').trim();
+    const body = {
+      first_name: val('set-first').trim(),
+      last_name: val('set-last').trim(),
+      phone_number: val('set-phone').trim(),
+      date_of_birth: dob || null,
+      address: val('set-address').trim(),
+    };
+    withBusy(async () => {
+      if (!id) { snack('Profile is still loading'); return; }
+      const r = await api('PATCH', '/api/v1/auth/profiles/' + id + '/', {
+        path: '/api/v1/auth/profiles/' + id + '/',
+        body,
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not save profile')); return; }
+      S.profile = r.data;
+      snack('Profile saved');
+    });
+  },
+
+  changepassword(){
+    const body = { current_password: val('set-current'), new_password: val('set-new') };
+    withBusy(async () => {
+      const r = await api('POST', '/api/v1/auth/users/change_password/', {
+        path: '/api/v1/auth/users/change_password/',
+        body,
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not change password')); return; }
+      snack('Password updated');
+    });
+  },
+
+  pref(v){ withBusy(async () => {
+    if (!S.prefs) await loadSettings();
+    const next = !(S.prefs && S.prefs[v]);
+    const r = await api('PATCH', '/api/v1/notifications/preferences/', {
+      path: '/api/v1/notifications/preferences/',
+      body: { [v]: next },
+    });
+    if (!r.ok) { snack(errMsg(r.data, 'Could not update notifications')); return; }
+    S.prefs = r.data;
+    snack(next ? 'Preference on' : 'Preference off');
+  }); },
+
+  saverate(v){
+    const body = { price: val('rate-price-' + v).trim(), estimated_days: val('rate-days-' + v).trim() };
+    withBusy(async () => {
+      const r = await api('PATCH', '/api/v1/orders/staff/shipping-rates/' + v + '/', {
+        path: '/api/v1/orders/staff/shipping-rates/' + v + '/',
+        body,
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not save delivery')); return; }
+      await loadStore();
+      snack('Delivery saved');
+    });
+  },
+
+  savead(v, btn){
+    const current = (S.staffAds || []).find(row => String(row.id) === String(v));
+    const active = btn && btn.dataset.flip === '1' ? !(current && current.is_active) : !!(current && current.is_active);
+    const body = {
+      title: val('ad-title-' + v).trim(),
+      body: val('ad-body-' + v).trim(),
+      product_slug: val('ad-slug-' + v).trim(),
+      is_active: active,
+    };
+    withBusy(async () => {
+      const r = await api('PATCH', '/api/v1/ads/staff/' + v + '/', {
+        path: '/api/v1/ads/staff/' + v + '/',
+        body,
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not save banner')); return; }
+      await loadStore();
+      await loadMerch();
+      snack('Banner saved');
+    });
+  },
+
+  savepromo(v, btn){
+    const current = (S.staffPromos || []).find(row => row.code === v);
+    const active = btn && btn.dataset.flip === '1' ? !(current && current.is_active) : !!(current && current.is_active);
+    const start = val('promo-start-' + v).trim();
+    const end = val('promo-end-' + v).trim();
+    const body = {
+      title: val('promo-title-' + v).trim(),
+      description: val('promo-body-' + v).trim(),
+      amount: val('promo-amount-' + v).trim(),
+      is_active: active,
+      starts_at: start || null,
+      ends_at: end || null,
+    };
+    withBusy(async () => {
+      const r = await api('PATCH', '/api/v1/promotions/staff/' + encodeURIComponent(v) + '/', {
+        path: '/api/v1/promotions/staff/' + v + '/',
+        body,
+      });
+      if (!r.ok) { snack(errMsg(r.data, 'Could not save promotion')); return; }
+      await loadStore();
+      await loadMerch();
+      snack(v + ' saved');
+    });
+  },
 };
 
 // Event delegation
@@ -1385,10 +1688,12 @@ async function boot(){
   try {
     await api('GET', '/api/v1/app/version-check/', { path: '/api/v1/app/version-check/' });
     await loadProducts();
+    await loadMerch();
     await loadCart();
     if (S.user && S.tokens) {
       await loadOrders();
       await loadSaved();
+      await loadInbox();
     }
     S.categories = [
       {id:'all', label:'Everything'},

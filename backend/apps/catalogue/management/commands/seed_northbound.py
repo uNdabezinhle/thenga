@@ -9,6 +9,8 @@ from django.utils.text import slugify
 
 from apps.accounts.models import MFADevice, Role, User, UserProfile, UserRole
 from apps.cart.models import Coupon
+from apps.orders.couriers import ensure_shipping_rates
+from apps.promotions.models import ShopAd, Voucher
 from apps.catalogue.models import (
     Brand,
     Category,
@@ -278,12 +280,15 @@ class Command(BaseCommand):
                     is_approved=True,
                 )
 
+        ensure_shipping_rates()
         Coupon.objects.update_or_create(
             code="DISCOUNT20",
             defaults={
                 "discount_type": "percentage",
                 "amount": Decimal("20.00"),
                 "is_active": True,
+                "title": "20% off the trail shop",
+                "description": "One code per cart. Does not apply to delivery.",
             },
         )
 
@@ -308,6 +313,24 @@ class Command(BaseCommand):
             },
         )
         UserRole.objects.get_or_create(user=user, role=customer)
+        Voucher.objects.get_or_create(
+            code="TRAIL50",
+            defaults={
+                "owner": user,
+                "amount": Decimal("50.00"),
+                "remaining_amount": Decimal("50.00"),
+            },
+        )
+        ShopAd.objects.update_or_create(
+            title="Trail week",
+            defaults={
+                "body": "The Ridgeline 45 is packed for the long walk out.",
+                "placement": ShopAd.Placement.SHOP_TOP,
+                "product_slug": "ridgeline-45-pack",
+                "is_active": True,
+                "sort_order": 0,
+            },
+        )
         # Enroll MFA so login exercises pre-auth path
         if not MFADevice.objects.filter(user=user).exists():
             import pyotp
@@ -371,4 +394,7 @@ class Command(BaseCommand):
         self.stdout.write("  Customer: jordan@northbound.test / correct-horse-42 (MFA enrolled)")
         self.stdout.write("  Staff:    staff@northbound.test / staff-ops-42")
         self.stdout.write("  Admin:    admin@northbound.test / admin-change-me")
+        self.stdout.write("  Delivery: Standard, Express, Next day")
         self.stdout.write("  Coupon:   DISCOUNT20 (20%)")
+        self.stdout.write("  Voucher:  TRAIL50 (R50, Jordan only)")
+        self.stdout.write("  Ad:       Trail week")

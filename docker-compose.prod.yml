@@ -1,13 +1,9 @@
 # Production-oriented stack (use with real secrets via env file)
-#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 services:
-  api:
+  migrate:
     build: .
-    command: >
-      sh -c "python manage.py migrate --noinput &&
-             python manage.py collectstatic --noinput &&
-             gunicorn reka.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60"
     environment: &app_env
       DJANGO_DEBUG: "false"
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
@@ -22,17 +18,50 @@ services:
       PUBLIC_API_BASE: ${PUBLIC_API_BASE:-https://api.example.com}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?set PAYMENT_WEBHOOK_SECRET}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-sandbox}
+      COURIER_PROVIDER: ${COURIER_PROVIDER:-sandbox}
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-false}
       EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       EMAIL_HOST: ${EMAIL_HOST:-}
       EMAIL_PORT: ${EMAIL_PORT:-587}
       EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-orders@example.com}
+      STATIC_ROOT: /var/www/static
+      MEDIA_ROOT: /app/media
+      RUN_MIGRATIONS: "true"
+    command: python manage.py collectstatic --noinput
+    volumes:
+      - static_vol:/var/www/static
+      - media_vol:/app/media
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    command: gunicorn reka.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60
+    environment:
+      <<: *app_env
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - media_vol:/app/media
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live/')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     restart: unless-stopped
     expose:
       - "8000"
@@ -42,18 +71,27 @@ services:
     command: celery -A reka worker -Q celery -l info --concurrency 2
     environment:
       <<: *app_env
+      RUN_MIGRATIONS: "false"
     depends_on:
-      - api
-      - redis
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   celery-beat:
     build: .
-    command: celery -A reka beat -l info
+    command: celery -A reka beat -l info --schedule=/var/lib/celery/celerybeat-schedule
     environment:
       <<: *app_env
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - beat:/var/lib/celery
     depends_on:
-      - celery-worker
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   postgres:
@@ -73,23 +111,40 @@ services:
 
   redis:
     image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
   edge:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: mobile/Dockerfile
     ports:
       - "80:80"
-      # - "443:443"
     volumes:
-      - ./deploy/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./frontend:/usr/share/nginx/html:ro
       - static_vol:/var/www/static:ro
       - media_vol:/var/www/media:ro
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   pgdata_prod:
   static_vol:
   media_vol:
+  beat:
