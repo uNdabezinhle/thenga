@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -7,6 +8,18 @@ import '../api/client.dart';
 import '../models/models.dart';
 
 final apiProvider = Provider<RekaApi>((ref) => RekaApi());
+
+/// Hosted shop from the web address. Empty means the Northbound sample.
+String shopMerchantSlug() {
+  if (!kIsWeb) return '';
+  return (Uri.base.queryParameters['merchant'] ?? '').trim().toLowerCase();
+}
+
+Map<String, dynamic> merchantQuery([Map<String, dynamic> params = const {}]) {
+  final slug = shopMerchantSlug();
+  if (slug.isEmpty) return params;
+  return {...params, 'merchant': slug};
+}
 
 class NbTab {
   static const shop = 0;
@@ -105,13 +118,16 @@ Map<String, dynamic> _queryParams(CatalogueQuery query) {
   if (query.brand.trim().isNotEmpty) params['brand'] = query.brand.trim();
   if (query.priceMin.trim().isNotEmpty) params['price_min'] = query.priceMin.trim();
   if (query.priceMax.trim().isNotEmpty) params['price_max'] = query.priceMax.trim();
-  return params;
+  return merchantQuery(params);
 }
 
 final categoriesProvider = FutureProvider<List<CatalogueChip>>((ref) async {
   try {
     final api = ref.watch(apiProvider);
-    final res = await api.dio.get('/api/v1/products/meta/categories/');
+    final res = await api.dio.get(
+      '/api/v1/products/meta/categories/',
+      queryParameters: merchantQuery({}),
+    );
     final chips = <CatalogueChip>[
       const CatalogueChip('all', 'Everything'),
       for (final row in jsonMaps(res.data))
@@ -127,7 +143,10 @@ final categoriesProvider = FutureProvider<List<CatalogueChip>>((ref) async {
 final brandsProvider = FutureProvider<List<CatalogueChip>>((ref) async {
   try {
     final api = ref.watch(apiProvider);
-    final res = await api.dio.get('/api/v1/products/meta/brands/');
+    final res = await api.dio.get(
+      '/api/v1/products/meta/brands/',
+      queryParameters: merchantQuery({}),
+    );
     return [
       for (final row in jsonMaps(res.data))
         if (asString(row['slug']).isNotEmpty)
@@ -151,7 +170,7 @@ final allProductsProvider = FutureProvider<List<Product>>((ref) async {
   final api = ref.watch(apiProvider);
   final res = await api.dio.get(
     '/api/v1/products/',
-    queryParameters: const {'page_size': 100},
+    queryParameters: merchantQuery({'page_size': 100}),
   );
   return _productsFrom(res.data);
 });
@@ -657,7 +676,10 @@ final promotionsProvider = FutureProvider<List<PromotionOffer>>((ref) async {
 
 final adsProvider = FutureProvider<List<ShopAd>>((ref) async {
   final api = ref.watch(apiProvider);
-  final res = await api.dio.get('/api/v1/ads/', queryParameters: {'placement': 'shop_top'});
+  final res = await api.dio.get(
+    '/api/v1/ads/',
+    queryParameters: merchantQuery({'placement': 'shop_top'}),
+  );
   return jsonMaps(res.data).map(ShopAd.fromJson).toList();
 });
 

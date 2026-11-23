@@ -26,7 +26,7 @@ class ShopScreen extends ConsumerWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Northbound'),
+            Text(shopMerchantSlug().isEmpty ? 'Northbound' : shopMerchantSlug()),
             Text(
               user == null ? 'Browsing as a guest' : 'Welcome back, ${user.name}',
               style: const TextStyle(

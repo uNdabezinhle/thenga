@@ -148,6 +148,80 @@ class PlatformTests(TestCase):
         self.assertEqual(sale.status_code, 400)
         self.assertEqual(sale.json()["error"]["code"], "package_excluded")
 
+    def test_choosing_a_package_ends_the_trial_and_keeps_the_catalogue(self):
+        self._open("shop_till")
+        merchant = Merchant.objects.get(trading_name="Kiosk")
+        merchant.trial_ends = timezone.now() - timezone.timedelta(days=1)
+        merchant.save(update_fields=["trial_ends"])
+        product = Product.objects.create(
+            merchant=merchant,
+            sku="KEEP-1",
+            name="Kept mug",
+            slug="kept-mug",
+            base_price=Decimal("15.00"),
+        )
+        variant = ProductVariant.objects.create(product=product, sku="KEEP-1-A", label="One")
+        Inventory.objects.create(variant=variant, quantity=4)
+        self.staff.merchant_memberships.create(merchant=merchant, role="staff")
+        denied = self.client.post(
+            "/api/v1/platform/package/",
+            data=json.dumps({"package": "shop"}),
+            content_type="application/json",
+            **self._auth(self.staff),
+        )
+        self.assertEqual(denied.status_code, 400)
+        self.assertEqual(denied.json()["error"]["code"], "permission_denied")
+        guest = self.client.post(
+            "/api/v1/platform/package/",
+            data=json.dumps({"package": "shop"}),
+            content_type="application/json",
+        )
+        self.assertEqual(guest.status_code, 401)
+
+        chosen = self.client.post(
+            "/api/v1/platform/package/",
+            data=json.dumps({"package": "shop", "addons": ["reviews"]}),
+            content_type="application/json",
+            **self._auth(self.owner),
+        )
+        self.assertEqual(chosen.status_code, 200, chosen.content)
+        body = chosen.json()
+        self.assertEqual(body["status"], "active")
+        self.assertTrue(body["shop"])
+        self.assertFalse(body["pos"])
+        self.assertTrue(body["prices_are_illustrative"])
+        self.assertEqual(body["addons"], ["reviews"])
+        self.assertTrue(Product.objects.filter(pk=product.pk, is_active=True).exists())
+        sale = self.client.post(
+            "/api/v1/pos/sales/",
+            data=json.dumps(
+                {
+                    "lines": [{"variant_id": variant.pk, "quantity": 1}],
+                    "tender": "cash",
+                    "idempotency_key": str(uuid.uuid4()),
+                }
+            ),
+            content_type="application/json",
+            **self._auth(self.owner),
+        )
+        self.assertEqual(sale.status_code, 400)
+        self.assertEqual(sale.json()["error"]["code"], "package_excluded")
+
+        ShopAd.objects.create(title="Sample banner", body="North", is_active=True)
+        ShopAd.objects.create(
+            title="Kiosk banner",
+            body="Own",
+            is_active=True,
+            merchant=merchant,
+            source="self_serve",
+        )
+        sample = self.client.get("/api/v1/ads/?placement=shop_top")
+        sample_titles = [row["title"] for row in sample.json()["results"]]
+        self.assertIn("Sample banner", sample_titles)
+        self.assertNotIn("Kiosk banner", sample_titles)
+        own = self.client.get(f"/api/v1/ads/?placement=shop_top&merchant={merchant.slug}")
+        self.assertEqual([row["title"] for row in own.json()["results"]], ["Kiosk banner"])
+
     def test_self_serve_ads_need_the_extra(self):
         self._open("shop")
         merchant = Merchant.objects.get(trading_name="Kiosk")

@@ -4,10 +4,10 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
-from apps.platform.catalog import MERCHANT_AD_SHARE_PERCENT, OPERATED_CLICK_GROSS
+from apps.platform.catalog import MERCHANT_AD_SHARE_PERCENT, OPERATED_CLICK_GROSS, SAMPLE_SLUG
 from apps.pricing.services import money_str
 
 from .models import AdEvent, AdShareStatement, ShopAd
@@ -29,12 +29,17 @@ def record_event(ad: ShopAd, kind: str) -> None:
     ShopAd.objects.filter(pk=ad.pk).update(**{field: F(field) + 1})
 
 
-def public_ads(placement: str):
-    return (
+def public_ads(placement: str, merchant_slug: str = ""):
+    """Sample shop sees unaffiliated banners. Another shop sees only its own."""
+    slug = (merchant_slug or SAMPLE_SLUG).strip().lower() or SAMPLE_SLUG
+    qs = (
         ShopAd.objects.filter(is_active=True, placement=placement)
         .exclude(source="operated", merchant__operated_ads=False)
         .select_related("merchant")
     )
+    if slug == SAMPLE_SLUG:
+        return qs.filter(Q(merchant__isnull=True) | Q(merchant__slug=SAMPLE_SLUG))
+    return qs.filter(merchant__slug=slug)
 
 
 def _figures(merchant, period: date) -> dict:

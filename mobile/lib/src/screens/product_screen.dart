@@ -37,6 +37,7 @@ class _ReviewBoxState extends ConsumerState<_ReviewBox> {
     try {
       await ref.read(apiProvider).dio.post(
         '/api/v1/products/${widget.productId}/reviews/',
+        queryParameters: merchantQuery({}),
         data: {'rating': _rating, 'body': text},
       );
       _body.clear();
@@ -120,7 +121,10 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
     });
     try {
       final api = ref.read(apiProvider);
-      final res = await api.dio.get('/api/v1/products/${widget.productId}/');
+      final res = await api.dio.get(
+        '/api/v1/products/${widget.productId}/',
+        queryParameters: merchantQuery({}),
+      );
       final product = Product.fromJson(Map<String, dynamic>.from(res.data as Map));
       ProductVariant? variant;
       for (final item in product.variants) {

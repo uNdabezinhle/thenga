@@ -12,6 +12,7 @@ from apps.cart.models import Cart, CartItem
 from apps.catalogue.models import Brand, Category, Inventory, Product, ProductVariant
 from apps.orders.models import Order, Payment
 from apps.orders.services import place_order
+from apps.notifications.models import NotificationLog
 from apps.payments.providers import SandboxProvider
 from apps.payments.services import process_sandbox_webhook, simulate_sandbox_success
 
@@ -81,6 +82,27 @@ class PaymentWebhookTests(TestCase):
         self.assertEqual(p1.id, p2.id)
         self.inv.refresh_from_db()
         self.assertEqual(self.inv.quantity, 3)  # only once
+
+    def test_failed_webhook_sends_one_mail(self):
+        order, payment, _ = self._order("card")
+        body = json.dumps(
+            {
+                "provider_reference": payment.provider_reference,
+                "status": "failed",
+                "amount": "80.00",
+                "event_id": str(uuid.uuid4()),
+            }
+        ).encode()
+        sig = SandboxProvider().sign(body)
+        process_sandbox_webhook(body, sig)
+        process_sandbox_webhook(body, sig)
+        logs = NotificationLog.objects.filter(template="payment_failed")
+        self.assertEqual(logs.count(), 1)
+        self.assertIn(order.reference, logs.get().subject)
+        payment.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.FAILED)
+        self.assertEqual(order.status, Order.Status.AWAITING_PAYMENT)
 
     def test_webhook_rejects_bad_signature(self):
         order, payment, _ = self._order("card")

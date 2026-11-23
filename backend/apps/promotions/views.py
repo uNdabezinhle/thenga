@@ -47,7 +47,7 @@ class AdListView(APIView):
 
     def get(self, request):
         placement = request.query_params.get("placement") or ShopAd.Placement.SHOP_TOP
-        ads = list(public_ads(placement))
+        ads = list(public_ads(placement, request.query_params.get("merchant") or ""))
         for ad in ads:
             record_event(ad, AdEvent.Kind.IMPRESSION)
         slugs = [ad.product_slug for ad in ads if ad.product_slug]

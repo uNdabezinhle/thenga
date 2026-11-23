@@ -17,6 +17,7 @@ from .models import MerchantMembership
 from .services import (
     add_store,
     checklist,
+    choose_package,
     import_catalogue,
     invite_staff,
     merchant_for,
@@ -88,6 +89,19 @@ def onboard(request):
     except OrderError as exc:
         return _fail(exc)
     return Response(checklist(merchant, request.user), status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def package_choice(request):
+    """Owner confirms Till, Shop, or Shop + Till. Nothing is charged."""
+    try:
+        merchant = choose_package(request.user, request.data)
+    except OrderError as exc:
+        return _fail(exc)
+    body = checklist(merchant, request.user)
+    body["prices_are_illustrative"] = True
+    return Response(body)
 
 
 @api_view(["GET", "PATCH"])

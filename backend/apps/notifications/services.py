@@ -188,6 +188,25 @@ def _order_merchant(order):
     return Merchant.objects.filter(pk=next(iter(ids))).first()
 
 
+def notify_payment_failed(order) -> NotificationLog:
+    merchant = order.merchant if getattr(order, "merchant_id", None) else _order_merchant(order)
+    brand = merchant.trading_name if merchant is not None else BRAND
+    return queue_or_send(
+        to=order.user.email,
+        subject=f"{brand} payment for {order.reference} did not go through",
+        template="payment_failed",
+        context={
+            "reference": order.reference,
+            "amount": f"{order.grand_total:.2f}",
+            "currency": order.currency,
+        },
+        user=order.user,
+        merchant=merchant,
+        metadata={"order_id": order.id},
+        transactional=True,
+    )
+
+
 def notify_order_confirmation(order) -> NotificationLog:
     merchant = _order_merchant(order)
     brand = merchant.trading_name if merchant is not None else BRAND

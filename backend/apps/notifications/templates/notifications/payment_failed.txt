@@ -1,0 +1,6 @@
+Hi,
+
+The payment for {{ brand }} order {{ reference }} ({{ currency }} {{ amount }}) did not go through. The order is not paid. You can try the checkout again.
+
+— {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

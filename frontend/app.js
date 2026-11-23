@@ -4,6 +4,11 @@
 
 const API_BASE = (window.REKA_API_BASE ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
 const APP_VERSION = '1.0.0 (build 1)';
+const SHOP_MERCHANT = (new URLSearchParams(location.search).get('merchant') || '').trim().toLowerCase();
+function shopPath(path) {
+  if (!SHOP_MERCHANT) return path;
+  return path + (path.includes('?') ? '&' : '?') + 'merchant=' + encodeURIComponent(SHOP_MERCHANT);
+}
 
 const I = (d) => `<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const ICO = {
@@ -276,7 +281,7 @@ function remember(id){
 async function loadMerch(){
   const promos = await api('GET', '/api/v1/promotions/', { path: '/api/v1/promotions/' });
   if (promos.ok) S.promos = (promos.data && promos.data.results) || [];
-  const ads = await api('GET', '/api/v1/ads/', { path: '/api/v1/ads/?placement=shop_top' });
+  const ads = await api('GET', '/api/v1/ads/', { path: shopPath('/api/v1/ads/?placement=shop_top') });
   if (ads.ok) S.ads = (ads.data && ads.data.results) || [];
   const bundles = await api('GET', '/api/v1/promotions/bundles/', { path: '/api/v1/promotions/bundles/' });
   if (bundles.ok) S.bundles = (bundles.data && bundles.data.results) || [];
@@ -327,7 +332,7 @@ async function loadProducts(){
   if (S.filters.q) q.set('q', S.filters.q);
   if (S.filters.sort && S.filters.sort !== 'featured') q.set('sort', S.filters.sort);
   q.set('page_size', '100');
-  const { ok, data } = await api('GET', '/api/v1/products/', { path: '/api/v1/products/?' + q.toString() });
+  const { ok, data } = await api('GET', '/api/v1/products/', { path: shopPath('/api/v1/products/?' + q.toString()) });
   if (ok) {
     // cursor or plain results
     S.products = data.results || data || [];
@@ -369,7 +374,7 @@ async function loadRecon(){
 }
 
 async function loadProduct(id){
-  const { ok, data } = await api('GET', '/api/v1/products/{id}/', { path: `/api/v1/products/${id}/` });
+  const { ok, data } = await api('GET', '/api/v1/products/{id}/', { path: shopPath(`/api/v1/products/${id}/`) });
   if (ok) {
     S.product = data;
     S.variant = (data.variants || []).find(v => +v.stock > 0) || null;
@@ -383,7 +388,7 @@ function scShop(){
   <div class="screen">
     <div class="appbar">
       <div style="flex:1">
-        <h1>Northbound</h1>
+        <h1>${SHOP_MERCHANT ? esc(SHOP_MERCHANT) : 'Northbound'}</h1>
         <div class="sub">${S.user ? 'Welcome back, ' + esc((S.user.name||'').split(' ')[0] || S.user.username) : 'Browsing as a guest'}</div>
       </div>
       <button class="iconbtn" data-act="tab" data-v="search" aria-label="Search">${ICO.search}</button>
@@ -1861,7 +1866,7 @@ const ACTIONS = {
     withBusy(async () => {
       if (!S.product) return;
       const r = await api('POST', '/api/v1/products/' + S.product.id + '/reviews/', {
-        path: '/api/v1/products/' + S.product.id + '/reviews/',
+        path: shopPath('/api/v1/products/' + S.product.id + '/reviews/'),
         body: { rating, body },
       });
       if (!r.ok) { snack(errMsg(r.data, 'Could not post the review')); return; }

@@ -95,9 +95,7 @@ def confirm_payment_from_webhook(
         return payment
 
     if status not in ("succeeded", "paid", "complete", "success"):
-        payment.status = Payment.Status.FAILED
-        payment.save(update_fields=["status"])
-        return payment
+        return mark_payment_failed(payment)
 
     if amount is not None and Decimal(str(amount)) != payment.amount:
         raise PaymentError(
@@ -156,6 +154,22 @@ def confirm_payment_from_webhook(
     except Exception:
         logger.exception("order confirmation email failed for %s", order.reference)
 
+    return payment
+
+
+def mark_payment_failed(payment: Payment) -> Payment:
+    """Record one failed attempt and send the transactional mail once."""
+    if payment.status in (Payment.Status.FAILED, Payment.Status.SUCCEEDED):
+        return payment
+    payment.status = Payment.Status.FAILED
+    payment.save(update_fields=["status"])
+    try:
+        order = Order.objects.select_related("user", "merchant").get(pk=payment.order_id)
+        from apps.notifications.services import notify_payment_failed
+
+        notify_payment_failed(order)
+    except Exception:
+        logger.exception("payment failed email failed for payment %s", payment.pk)
     return payment
 
 

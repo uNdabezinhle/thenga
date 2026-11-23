@@ -8,8 +8,9 @@ Reka is the platform. Northbound is the sample merchant on a hosted install. A t
 2. `POST /api/v1/platform/onboarding/` with trading name, package (`till`, `shop`, or `shop_till`), extras, `privacy_accepted: true`, and `empty_catalogue_ok: true`.
 3. A 14-day trial has both shop and till. After that, new sales stop until the package is marked active.
 4. `GET /api/v1/platform/onboarding/status/` is the go-live checklist.
-5. The public shop for that merchant is the product list with `?merchant=<slug>`. Till-only shops return an empty list.
-6. Prices from `GET /api/v1/platform/packages/` are illustrative. They are not collected.
+5. The owner confirms the package with `POST /api/v1/platform/package/` (`package`, optional `addons`). That marks the shop active and does not collect the illustrative price. A downgrade keeps products and orders. Staff cannot confirm it.
+6. The public shop is `/?merchant=<slug>` on the phone demo and on Flutter web, and `GET /api/v1/products/?merchant=<slug>`. With no slug, the sample shop is Northbound. Ads on that address are only that shop’s banners. A till-only shop returns an empty catalogue.
+7. Prices from `GET /api/v1/platform/packages/` are illustrative. They are not collected.
 
 ## Self-hosted
 
@@ -35,7 +36,7 @@ Merchants who selected the reminders extra get unpaid-checkout, trial-ending, lo
 
 ## PayFast
 
-Leave keys empty until the merchant is ready. Card and EFT stay on the sandbox. Cash and card-present on the till do not need PayFast.
+Leave keys empty until the merchant is ready. Card and EFT stay on the sandbox. Cash and card-present on the till do not need PayFast. A failed card or EFT sends one transactional mail. An abandoned checkout is released by the existing pending-payment task and does not send that mail.
 
 ## Who sees which orders
 

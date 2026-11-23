@@ -192,8 +192,9 @@ def sandbox_simulate(request):
         )
 
     if data.get("status") in ("failed", "fail"):
-        payment.status = Payment.Status.FAILED
-        payment.save(update_fields=["status"])
+        from apps.payments.services import mark_payment_failed
+
+        mark_payment_failed(payment)
         return HttpResponse(
             json.dumps({"ok": True, "payment_status": "failed"}),
             content_type="application/json",

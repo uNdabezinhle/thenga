@@ -26,6 +26,12 @@
   .price { font-family:ui-monospace, monospace; font-size:28px; margin:8px 0; }
   .muted { color:var(--mute); font-size:14px; line-height:1.5; }
   ul { padding-left:18px; }
+  form { max-width:440px; }
+  label { display:block; font-size:14px; margin:12px 0 4px; }
+  input, select { width:100%; padding:10px 12px; border:1px solid var(--hair); border-radius:8px; font:inherit; background:#fff; }
+  .check { display:flex; gap:8px; align-items:flex-start; margin-top:12px; font-size:14px; }
+  .check input { width:auto; margin-top:3px; }
+  #open-result { margin-top:14px; }
   footer { padding:28px 7vw 48px; color:var(--mute); font-size:13px; border-top:1px solid var(--hair); }
   @media (max-width:800px) {
     .hero, .grid { grid-template-columns:1fr; }
@@ -42,7 +48,9 @@
     <a href="#shop">Shop</a>
     <a href="#pricing">Pricing</a>
     <a href="#ads">Ads</a>
+    <a href="#start">Start</a>
     <a href="#legal">Legal</a>
+    <a href="#run">Run</a>
     <a href="/">Sample shop</a>
   </nav>
 </header>
@@ -106,15 +114,122 @@
 
   <section id="start">
     <h2>Open a shop</h2>
-    <p class="muted">Create an account in the sample app, then send your trading name, package, and extras to <span class="muted">POST /api/v1/platform/onboarding/</span>. The new shop starts empty. It does not copy Northbound. The checklist is <span class="muted">GET /api/v1/platform/onboarding/status/</span>. Packages are listed at <span class="muted">GET /api/v1/platform/packages/</span>.</p>
-    <p><a class="btn" href="/">Create an account on the sample</a></p>
+    <p class="muted">This creates your account and an empty shop. It does not copy the Northbound catalogue, and it does not charge the prices on this page. A 14-day trial has both the shop and the till. When you are ready, the owner confirms a package and sales follow that package. Saved products stay if you change it.</p>
+    <form id="open-shop">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="trading">Trading name</label>
+      <input id="trading" name="trading_name" required>
+      <label for="city">City</label>
+      <input id="city" name="city">
+      <label for="package">Package</label>
+      <select id="package" name="package">
+        <option value="shop_till">Shop + Till</option>
+        <option value="shop">Shop</option>
+        <option value="till">Till</option>
+      </select>
+      <label class="check"><input id="privacy" name="privacy" type="checkbox" required> I accept the <a href="#privacy">privacy notice</a>.</label>
+      <label class="check"><input id="empty" name="empty" type="checkbox" required> Start with an empty catalogue.</label>
+      <div class="row"><button class="btn" type="submit">Open the shop</button></div>
+      <p id="open-result" class="muted" role="status"></p>
+    </form>
   </section>
 
   <section id="legal">
     <h2>Legal</h2>
-    <p class="muted">The public name still needs a company search, a trademark search in classes 9, 35 and 42, and the domain, before a public launch. Transactional mail about your order and payment is part of the service. Marketing mail is sent only with consent. Operated ads are not built from a personal profile.</p>
+    <p class="muted">The public name still needs a company search, a trademark search in classes 9, 35 and 42, and the domain, before a public launch. These notices describe how the software behaves. Have them reviewed before you rely on them with customers.</p>
+    <h3 id="terms">Terms</h3>
+    <p class="muted">Reka is the platform. The merchant is the seller. The sample shop, Northbound, is a demonstration. Package prices on this site are illustrative and are not collected. Card and EFT stay on the sandbox until the merchant saves PayFast keys. Cash and card-present on the till do not need those keys. After the trial, the owner confirms a package. New sales follow that package. Downgrading keeps the catalogue and the orders already saved.</p>
+    <h3 id="privacy">Privacy</h3>
+    <p class="muted">An account stores the name, email, and password hash. An order stores what was bought, the address given at checkout, and the payment result. The mail log records sent, skipped, and failed messages for that shop. Marketing mail is sent only when the person has consented. Operated ads use the shop and the category, not a named shopper’s history.</p>
+    <h3 id="popia">POPIA</h3>
+    <p class="muted">For a shopper’s order, the merchant is the responsible party and Reka processes the platform mail and the hosted record. Transactional mail about verify, payment, and the order is part of the service. Marketing mail needs consent under section 69. A person can ask the merchant for the record the shop holds.</p>
+  </section>
+
+  <section id="run">
+    <h2>Run a server</h2>
+    <p class="muted">Copy the database volume and the media directory before an upgrade. Restore by putting those two back and starting the stack. Receipts are generated from orders, not stored as files. The mail log is on the merchant account. Leave PayFast keys empty until you are ready. Card and EFT then stay on the sandbox.</p>
+    <p class="muted">On an empty server, <span class="muted">python manage.py setup_reka --trading-name "Kiosk" --owner-email owner@kiosk.test --password "a-long-secret" --package shop_till</span> opens one shop and sends the verification mail. It does not load Northbound. Add <span class="muted">--demo</span> only for the sample catalogue.</p>
   </section>
 </main>
+<script>
+document.getElementById('open-shop').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const out = document.getElementById('open-result');
+  const button = form.querySelector('button');
+  const body = {
+    email: form.email.value.trim(),
+    username: form.username.value.trim(),
+    password: form.password.value,
+    password2: form.password.value,
+  };
+  button.disabled = true;
+  out.textContent = 'Opening the shop…';
+  try {
+    const registered = await fetch('/api/v1/auth/users/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!registered.ok) {
+      out.textContent = await explain(registered, 'Could not create the account.');
+      return;
+    }
+    const signed = await fetch('/api/v1/auth/token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: body.email, password: body.password }),
+    });
+    const token = await signed.json();
+    if (!signed.ok || !token.access) {
+      out.textContent = 'Account created. Sign in from the sample shop and open the checklist.';
+      return;
+    }
+    const opened = await fetch('/api/v1/platform/onboarding/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token.access,
+      },
+      body: JSON.stringify({
+        trading_name: form.trading_name.value.trim(),
+        package: form.package.value,
+        city: form.city.value.trim(),
+        privacy_accepted: true,
+        empty_catalogue_ok: true,
+        addons: [],
+      }),
+    });
+    const shop = await opened.json();
+    if (!opened.ok) {
+      out.textContent = (shop.error && shop.error.message) || 'The account exists, but the shop did not open.';
+      return;
+    }
+    out.textContent = shop.trading_name + ' is open at /?merchant=' + shop.slug + '. Nothing was charged. Verify the email, then confirm the package when the trial should end.';
+  } catch (err) {
+    out.textContent = 'The shop service did not answer.';
+  } finally {
+    button.disabled = false;
+  }
+});
+async function explain(response, fallback) {
+  try {
+    const data = await response.json();
+    if (data.error && data.error.message) return data.error.message;
+    if (data.detail) return String(data.detail);
+    const first = Object.values(data)[0];
+    if (Array.isArray(first)) return String(first[0]);
+    return fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+</script>
 <footer>
   Reka is the platform. Northbound is a sample outdoor shop used to show the software.
 </footer>

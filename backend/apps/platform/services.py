@@ -223,6 +223,33 @@ def checklist(merchant: Merchant, user) -> dict:
     }
 
 
+def choose_package(user, payload: dict) -> Merchant:
+    """Mark the chosen package active. Illustrative prices are not collected."""
+    merchant = _owner_merchant(user)
+    package = str((payload or {}).get("package") or merchant.package).strip()
+    if package not in PACKAGE_BY_CODE:
+        raise OrderError("Choose Till, Shop, or Shop + Till.", code="validation_failed")
+    addons = None
+    if isinstance(payload, dict) and "addons" in payload:
+        addons = payload.get("addons") or []
+        if not isinstance(addons, list):
+            raise OrderError("Extras must be a list.", code="validation_failed")
+        unknown = [code for code in addons if code not in ADDON_BY_CODE]
+        if unknown:
+            raise OrderError("Unknown extra.", code="validation_failed")
+        addons = list(dict.fromkeys(addons))
+    merchant.package = package
+    merchant.status = Merchant.Status.ACTIVE
+    merchant.save(update_fields=["package", "status"])
+    if addons is not None:
+        merchant.addons.exclude(code__in=addons).delete()
+        have = set(merchant.addons.values_list("code", flat=True))
+        for code in addons:
+            if code not in have:
+                MerchantAddOn.objects.create(merchant=merchant, code=code)
+    return merchant
+
+
 def _owner_merchant(user) -> Merchant:
     merchant = merchant_for(user)
     if merchant is None or merchant.slug == SAMPLE_SLUG:
