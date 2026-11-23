@@ -70,6 +70,16 @@ def place_order(
     if not items:
         raise OrderError("Cart is empty.", code="cart_empty")
 
+    from apps.platform.services import require_feature
+
+    seen = set()
+    for item in items:
+        merchant = getattr(item.product, "merchant", None)
+        if merchant is None or merchant.pk in seen:
+            continue
+        seen.add(merchant.pk)
+        require_feature(merchant, "shop")
+
     ensure_shipping_estimates(cart)
     totals = cart_totals(cart)
     selected = cart.shipping_estimates.filter(is_selected=True).first()
@@ -193,6 +203,11 @@ def transition_order(order: Order, new_status: str, actor=None, note: str = "") 
 
 def advance_order(order: Order, actor=None) -> Order:
     """Simulate next webhook / fulfilment step for demo tracking."""
+    if order.channel == Order.Channel.POS:
+        raise OrderError(
+            "Counter sales are collected in store.",
+            code="pos_not_dispatchable",
+        )
     stages = Order.TRACKING_STAGES
     try:
         idx = stages.index(order.status)
@@ -217,6 +232,11 @@ def advance_order(order: Order, actor=None) -> Order:
 @transaction.atomic
 def book_shipment(order: Order, actor=None) -> Order:
     """Book the configured courier once. A second call returns the same waybill."""
+    if order.channel == Order.Channel.POS:
+        raise OrderError(
+            "Counter sales are collected in store.",
+            code="pos_not_dispatchable",
+        )
     order = Order.objects.select_for_update().get(pk=order.pk)
     shipment = order.shipments.select_for_update().first()
     if shipment and shipment.tracking_number:
@@ -307,12 +327,16 @@ def cancel_order(order: Order, actor=None, note: str = "Cancelled") -> Order:
             "This order can no longer be cancelled.",
             code="invalid_transition",
         )
+    from apps.pos.stock import locked_stock
+
     for item in order.items.select_related("variant").all():
         if not item.variant_id:
             continue
+        from apps.pos.models import StoreStock
+
         try:
-            inv = Inventory.objects.select_for_update().get(variant_id=item.variant_id)
-        except Inventory.DoesNotExist:
+            inv = locked_stock(order, item.variant_id)
+        except (Inventory.DoesNotExist, StoreStock.DoesNotExist):
             continue
         if order.status == Order.Status.AWAITING_PAYMENT:
             inv.release(item.quantity)

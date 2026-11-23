@@ -122,8 +122,29 @@ class OrderViewSet(
 
     @action(detail=True, methods=["get"], url_path="invoice")
     def invoice(self, request, reference=None):
-        """Tax invoice HTML — REKA-FR-ORD-013."""
-        order = self.get_object()
+        """Tax invoice HTML — REKA-FR-ORD-013. Staff can open a counter receipt."""
+        from apps.accounts.permissions import IsStaffRole
+
+        if IsStaffRole().has_permission(request, self):
+            order = (
+                Order.objects.filter(reference=reference)
+                .prefetch_related("items")
+                .select_related("user")
+                .first()
+            )
+            if order is None:
+                return Response(
+                    {
+                        "error": {
+                            "code": "not_found",
+                            "message": "Order not found.",
+                            "request_id": getattr(request, "request_id", "-"),
+                        }
+                    },
+                    status=404,
+                )
+        else:
+            order = self.get_object()
         if order.status in (
             Order.Status.AWAITING_PAYMENT,
             Order.Status.CANCELLED,

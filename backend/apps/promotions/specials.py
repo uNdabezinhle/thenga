@@ -84,8 +84,15 @@ def _voucher_code(prefix: str) -> str:
 
 @transaction.atomic
 def award_order_specials(order) -> None:
-    order = Order.objects.select_for_update().get(pk=order.pk)
+    order = Order.objects.select_for_update().select_related("user").get(pk=order.pk)
     if order.specials_awarded:
+        return
+    from apps.pos.constants import COUNTER_EMAIL
+
+    if (order.user.email or "").lower() == COUNTER_EMAIL:
+        order.loyalty_points = 0
+        order.specials_awarded = True
+        order.save(update_fields=["loyalty_points", "specials_awarded"])
         return
     points = int(order.subtotal // Decimal("10"))
     account = LoyaltyAccount.objects.select_for_update().get_or_create(user_id=order.user_id)[0]

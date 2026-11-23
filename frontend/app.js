@@ -56,6 +56,10 @@ const ENDPOINTS = [
   {m:'POST',  p:'/api/v1/payments/sandbox/complete/', g:'Payments'},
   {m:'POST',  p:'/api/v1/payments/webhooks/sandbox/', g:'Payments'},
   {m:'GET',   p:'/api/v1/orders/staff/', g:'Staff'},
+  {m:'GET',   p:'/api/v1/pos/catalog/', g:'Staff'},
+  {m:'POST',  p:'/api/v1/pos/sales/', g:'Staff'},
+  {m:'POST',  p:'/api/v1/pos/sales/sync/', g:'Staff'},
+  {m:'POST',  p:'/api/v1/pos/scan/', g:'Staff'},
   {m:'POST',  p:'/api/v1/payments/refunds/', g:'Staff'},
   {m:'GET',   p:'/api/v1/payments/reconciliation/', g:'Staff'},
 ];
@@ -111,6 +115,11 @@ const S = {
   lastMs: 0,
   staffOrders: [],
   recon: null,
+  pos: {
+    q: '', email: '', code: '', tender: 'cash', store: 'harbour',
+    stores: [], hits: [], lines: [], note: '', receipt: '',
+    queue: store.get('pos_queue') || [],
+  },
   staffFilter: '',
 };
 
@@ -773,6 +782,11 @@ function scStaff(){
       <button class="iconbtn" data-act="staffrefresh" aria-label="Refresh">${ICO.search}</button>
     </div>
     <div class="body">
+      <button class="card between" style="width:100%;text-align:left;margin-bottom:10px" data-act="till">
+        <span><b style="font-size:13.5px">Open till</b>
+        <span class="muted" style="display:block;font-size:11.5px">Counter sale, scanner, and drawer</span></span>
+        <span style="color:var(--mute)">${ICO.chev}</span>
+      </button>
       <button class="card between" style="width:100%;text-align:left;margin-bottom:14px" data-act="store">
         <span><b style="font-size:13.5px">Store settings</b>
         <span class="muted" style="display:block;font-size:11.5px">Delivery, banner, and promotion</span></span>
@@ -1007,9 +1021,125 @@ function scStore(){
   </div>`;
 }
 
+function addPosHit(hit){
+  const variantId = hit.variant_id || null;
+  const bundleId = hit.bundle_id || null;
+  const found = S.pos.lines.find(line =>
+    (variantId && line.variantId === variantId) || (bundleId && line.bundleId === bundleId)
+  );
+  if (found) found.quantity += 1;
+  else S.pos.lines.push({
+    name: hit.name || '',
+    price: hit.unit_price || '',
+    variantId, bundleId, quantity: 1,
+  });
+}
+
+function posPayload(key){
+  return {
+    store_code: S.pos.store,
+    tender: S.pos.tender,
+    customer_email: S.pos.email || '',
+    discount_code: S.pos.code || '',
+    idempotency_key: key,
+    lines: S.pos.lines.map(line => line.bundleId
+      ? { bundle_id: line.bundleId, quantity: line.quantity }
+      : { variant_id: line.variantId, quantity: line.quantity }),
+  };
+}
+
+function showPosSale(data){
+  const redirect = data.redirect_url || '';
+  S.pos.lines = [];
+  S.pos.receipt = redirect
+    ? (data.reference + ' is waiting for PayFast')
+    : (data.reference + ' · ' + money(data.grand_total));
+  S.pos.note = data.drawer_kick ? 'Cash drawer opened.' : '';
+  if (redirect) snack('Finish PayFast on the hosted page. The till does not mark it paid.');
+}
+
+async function loadPosCatalog(query){
+  const r = await api('GET', '/api/v1/pos/catalog/?q=&store=', {
+    path: '/api/v1/pos/catalog/?q=' + encodeURIComponent(query || '') + '&store=' + encodeURIComponent(S.pos.store || 'harbour'),
+  });
+  if (!r.ok) { S.pos.note = errMsg(r.data, 'Catalogue unavailable'); return; }
+  S.pos.hits = (r.data.variants || []).concat(r.data.bundles || []);
+}
+
+async function syncPos(silent){
+  if (!S.pos.queue.length) {
+    if (!silent) S.pos.note = 'Nothing waiting to sync.';
+    return;
+  }
+  const r = await api('POST', '/api/v1/pos/sales/sync/', {
+    path: '/api/v1/pos/sales/sync/',
+    body: { sales: S.pos.queue },
+  });
+  if (r.status === 0) {
+    if (!silent) S.pos.note = 'Still offline.';
+    return;
+  }
+  if (!r.ok) { S.pos.note = errMsg(r.data, 'Sync failed'); return; }
+  const results = r.data.results || [];
+  S.pos.queue = S.pos.queue.filter((row, i) => !(results[i] && results[i].ok));
+  store.set('pos_queue', S.pos.queue);
+  S.pos.note = S.pos.queue.length ? 'Some sales still need attention.' : 'Offline sales synced.';
+}
+
+function scTill(){
+  if (!S.user || !S.user.is_staff_ops) {
+    return `<div class="screen"><div class="appbar"><div style="flex:1"><h1>Till</h1></div></div>
+      <div class="empty"><h3>Staff only</h3><p class="muted">Sign in as staff@northbound.test</p></div></div>`;
+  }
+  const pos = S.pos;
+  const stores = (pos.stores || []).map(store =>
+    `<button class="chip ${pos.store===store.code?'on':''}" data-act="posstore" data-v="${esc(store.code)}">${esc(store.name)}</button>`
+  ).join('');
+  const hits = (pos.hits || []).slice(0, 8).map(hit => {
+    const id = hit.bundle_id || hit.variant_id;
+    const kind = hit.bundle_id ? 'bundle' : 'variant';
+    return `<button class="btn" style="margin-bottom:8px;text-align:left" data-act="posadd" data-v="${id}" data-kind="${kind}" data-name="${esc(hit.name)}" data-price="${esc(hit.unit_price)}">${esc(hit.name)} · ${money(hit.unit_price)} · ${hit.available}</button>`;
+  }).join('');
+  const lines = (pos.lines || []).map((line, i) => `<div class="between" style="padding:8px 0;border-bottom:1px solid var(--hair)">
+      <span><b style="font-size:13px">${esc(line.name)}</b><span class="muted" style="display:block;font-size:11px">${money(line.price)}</span></span>
+      <span class="row" style="gap:6px">
+        <button class="iconbtn" data-act="posqty" data-v="${i}" data-dir="-1">${ICO.minus}</button>
+        <b>${line.quantity}</b>
+        <button class="iconbtn" data-act="posqty" data-v="${i}" data-dir="1">${ICO.plus}</button>
+      </span>
+    </div>`).join('');
+  return `<div class="screen">
+    <div class="appbar"><button class="iconbtn" data-act="tab" data-v="staff">${ICO.back}</button>
+      <div style="flex:1"><h1>Till</h1><div class="sub">${pos.queue.length} waiting to sync</div></div>
+      <button class="iconbtn" data-act="possync" aria-label="Sync">Sync</button>
+    </div>
+    <div class="body">
+      ${stores ? `<div class="chips" style="margin-bottom:10px">${stores}</div>` : ''}
+      <div class="field"><label>Scan or search</label>
+        <input id="posq" autofocus placeholder="Barcode, SKU, or name" value="${esc(pos.q)}"></div>
+      ${hits}
+      ${lines || '<p class="muted" style="font-size:12px">No lines yet.</p>'}
+      <div class="field" style="margin-top:12px"><label>Customer email (optional)</label>
+        <input id="posemail" value="${esc(pos.email)}" autocomplete="off"></div>
+      <div class="field"><label>Discount code (optional)</label>
+        <input id="poscode" value="${esc(pos.code)}" autocomplete="off"></div>
+      <div class="chips">
+        ${['cash','card','payfast'].map(t => `<button class="chip ${pos.tender===t?'on':''}" data-act="postender" data-v="${t}">${t}</button>`).join('')}
+      </div>
+      <button class="btn" data-act="possale" ${S.busy?'disabled':''}>${S.busy?'<span class="spinner"></span> Taking payment':'Take '+esc(pos.tender)}</button>
+      ${pos.receipt ? `<p style="font-weight:700;margin-top:12px">${esc(pos.receipt)}</p>` : ''}
+      ${pos.note ? `<p class="muted" style="font-size:12px">${esc(pos.note)}</p>` : ''}
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn ghost" data-act="posdrawer" data-v="open">Open drawer</button>
+        <button class="btn ghost" data-act="posdrawer" data-v="close">Close drawer</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 const SCREENS = {shop:scShop, search:scSearch, product:scProduct, cart:scCart,
                  saved:scSaved, checkout:scCheckout, orders:scOrders, profile:scProfile, staff:scStaff,
-                 settings:scSettings, store:scStore};
+                 settings:scSettings, store:scStore, till:scTill};
 const NAV = [
   {k:'shop',   l:'Shop',    i:'shop'},
   {k:'search', l:'Search',  i:'search'},
@@ -1137,6 +1267,12 @@ function captureForm(){
     else if (id === 'code') S.form.code = el.value;
     else S.form[id] = el.value;
   });
+  const posq = document.getElementById('posq');
+  if (posq) S.pos.q = posq.value;
+  const posemail = document.getElementById('posemail');
+  if (posemail) S.pos.email = posemail.value;
+  const poscode = document.getElementById('poscode');
+  if (poscode) S.pos.code = poscode.value;
 }
 
 async function finishLogin(tokens, profile){
@@ -1825,6 +1961,83 @@ const ACTIONS = {
       snack(v + ' saved');
     });
   },
+
+  till(){ withBusy(async () => {
+    if (!S.user || !S.user.is_staff_ops) { snack('Staff sign-in required'); return; }
+    const stores = await api('GET', '/api/v1/pos/stores/', { path: '/api/v1/pos/stores/' });
+    if (stores.ok) S.pos.stores = stores.data.results || [];
+    await loadPosCatalog('');
+    await syncPos(true);
+    go('till');
+  }); },
+
+  posstore(v){ S.pos.store = v; withBusy(async () => { await loadPosCatalog(S.pos.q); }); },
+
+  posscan(){ withBusy(async () => {
+    const code = (S.pos.q || '').trim();
+    if (!code) { await loadPosCatalog(''); return; }
+    const r = await api('POST', '/api/v1/pos/scan/', {
+      path: '/api/v1/pos/scan/',
+      body: { code, store_code: S.pos.store },
+    });
+    if (r.ok) { addPosHit(r.data); S.pos.q = ''; return; }
+    if (r.status === 0) { S.pos.note = 'Offline. Search needs the network.'; return; }
+    await loadPosCatalog(code);
+  }); },
+
+  posadd(v, btn){
+    const kind = btn && btn.dataset.kind;
+    addPosHit({
+      name: btn ? btn.dataset.name : '',
+      unit_price: btn ? btn.dataset.price : '',
+      variant_id: kind === 'bundle' ? null : +v,
+      bundle_id: kind === 'bundle' ? +v : null,
+    });
+  },
+
+  posqty(v, btn){
+    const line = S.pos.lines[+v];
+    if (!line) return;
+    const dir = btn && btn.dataset.dir === '-1' ? -1 : 1;
+    line.quantity += dir;
+    if (line.quantity < 1) S.pos.lines.splice(+v, 1);
+    render();
+  },
+
+  postender(v){ S.pos.tender = v; render(); },
+
+  possale(){ withBusy(async () => {
+    if (!S.pos.lines.length) { S.pos.note = 'Add a line first.'; return; }
+    const body = posPayload(uuid());
+    const r = await api('POST', '/api/v1/pos/sales/', { path: '/api/v1/pos/sales/', body });
+    if (r.status === 0) {
+      S.pos.queue.push(body);
+      store.set('pos_queue', S.pos.queue);
+      S.pos.lines = [];
+      S.pos.note = 'Saved offline. Sync when the till is back online.';
+      S.pos.receipt = '';
+      return;
+    }
+    if (!r.ok) { S.pos.note = errMsg(r.data, 'Could not take payment'); return; }
+    showPosSale(r.data);
+  }); },
+
+  possync(){ withBusy(() => syncPos(false)); },
+
+  posdrawer(v){ withBusy(async () => {
+    const amount = prompt(v === 'open' ? 'Opening float in ZAR' : 'Counted cash in ZAR', '0.00');
+    if (amount === null) return;
+    const r = await api('POST', '/api/v1/pos/drawer/', {
+      path: '/api/v1/pos/drawer/',
+      body: {
+        action: v,
+        store_code: S.pos.store,
+        opening_float: v === 'open' ? String(amount).trim() : undefined,
+        closing_count: v === 'close' ? String(amount).trim() : undefined,
+      },
+    });
+    S.pos.note = r.ok ? (v === 'open' ? 'Drawer open.' : 'Drawer closed.') : errMsg(r.data, 'Drawer not updated');
+  }); },
 };
 
 // Event delegation
@@ -1842,6 +2055,11 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.id === 'q') {
     captureForm();
     loadProducts().then(render);
+  }
+  if (e.key === 'Enter' && e.target.id === 'posq') {
+    e.preventDefault();
+    captureForm();
+    ACTIONS.posscan();
   }
 });
 

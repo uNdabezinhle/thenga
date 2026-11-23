@@ -60,7 +60,9 @@ def invoice_context(order) -> dict:
         "invoice_number": f"INV-{order.reference}",
         "issued_at": issued.strftime("%Y-%m-%d %H:%M UTC"),
         "customer_email": order.user.email,
-        "ship_to": order.shipping_address_text or "—",
+        "ship_to": order.shipping_address_text
+        or ("Collected in store" if getattr(order, "channel", "") == "pos" else "—"),
+        "document_label": "Counter sale" if getattr(order, "channel", "") == "pos" else "Tax invoice",
         "lines": lines,
         "currency": order.currency,
         "subtotal": money_str(order.subtotal),
@@ -119,7 +121,7 @@ def render_invoice_html(order) -> str:
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Tax Invoice {escape(ctx['invoice_number'])}</title>
+<title>{escape(ctx['document_label'])} {escape(ctx['invoice_number'])}</title>
 <style>
   :root {{ --ink:#101512; --mute:#6E7B72; --hair:#D8DCD3; --forest:#0E2A22; --lime:#C8F751; }}
   * {{ box-sizing:border-box; }}
@@ -146,7 +148,7 @@ def render_invoice_html(order) -> str:
 </head>
 <body>
   <div class="sheet">
-    <span class="tag">Tax invoice</span>
+    <span class="tag">{escape(ctx['document_label'])}</span>
     <h1>{escape(ctx['brand'])}</h1>
     <p style="margin:0;color:var(--mute);font-size:13px">{escape(ctx['merchant']['name'])} · VAT {escape(ctx['merchant']['vat_number'])}</p>
     <p style="margin:4px 0 0;color:var(--mute);font-size:12.5px">{escape(ctx['merchant']['address'])}</p>

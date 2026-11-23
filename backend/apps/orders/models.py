@@ -34,6 +34,10 @@ class Address(models.Model):
 
 
 class Order(models.Model):
+    class Channel(models.TextChoices):
+        ONLINE = "online", "Online"
+        POS = "pos", "Point of sale"
+
     class Status(models.TextChoices):
         AWAITING_PAYMENT = "awaiting_payment", "Awaiting payment"
         PAYMENT_CONFIRMED = "payment_confirmed", "Payment confirmed"
@@ -63,6 +67,16 @@ class Order(models.Model):
     ]
 
     reference = models.CharField(max_length=32, unique=True, db_index=True)
+    channel = models.CharField(
+        max_length=16, choices=Channel.choices, default=Channel.ONLINE, db_index=True
+    )
+    store = models.ForeignKey(
+        "pos.Store",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )

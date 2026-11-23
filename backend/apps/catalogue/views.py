@@ -64,7 +64,9 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = (
-            Product.objects.filter(is_active=True)
+            Product.objects.filter(is_active=True).exclude(
+                sale_channel=Product.SaleChannel.POS
+            )
             .select_related("brand", "category")
             .prefetch_related(
                 Prefetch(
@@ -86,6 +88,14 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
         params = self.request.query_params
+        from apps.platform.catalog import SAMPLE_SLUG
+        from apps.platform.services import public_product_scope, shop_is_public
+
+        merchant_slug = (params.get("merchant") or SAMPLE_SLUG).strip().lower() or SAMPLE_SLUG
+        if not shop_is_public(merchant_slug):
+            qs = qs.none()
+        else:
+            qs = qs.filter(public_product_scope(merchant_slug))
         cat = params.get("category")
         if cat and cat != "all":
             qs = qs.filter(Q(category__slug=cat) | Q(category__name__iexact=cat))

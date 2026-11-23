@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
-from apps.core.frontend import spa_asset, spa_index
+from apps.core.frontend import spa_asset, spa_index, welcome_page
 from apps.core.health import live, ready
 
 urlpatterns = [
@@ -20,11 +20,14 @@ urlpatterns = [
     path("api/v1/products/", include("apps.catalogue.urls")),
     path("api/v1/cart/", include("apps.cart.urls")),
     path("api/v1/orders/", include("apps.orders.urls")),
+    path("api/v1/pos/", include("apps.pos.urls")),
     path("api/v1/payments/", include("apps.payments.urls")),
     path("api/v1/notifications/", include("apps.notifications.urls")),
     path("api/v1/promotions/", include("apps.promotions.urls")),
     path("api/v1/ads/", include("apps.promotions.ad_urls")),
-    # Northbound SPA (local/dev convenience — same origin as API)
+    path("api/v1/platform/", include("apps.platform.urls")),
+    path("welcome/", welcome_page, name="reka-welcome"),
+    # Northbound sample shop (local/dev convenience — same origin as API)
     path("", spa_index, name="spa-index"),
     path("app.js", spa_asset, {"path": "app.js"}, name="spa-app-js"),
 ]

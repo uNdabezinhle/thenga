@@ -48,8 +48,10 @@ INSTALLED_APPS = [
     # local
     "apps.core",
     "apps.accounts",
+    "apps.platform",
     "apps.catalogue",
     "apps.cart",
+    "apps.pos",
     "apps.orders",
     "apps.payments",
     "apps.pricing",

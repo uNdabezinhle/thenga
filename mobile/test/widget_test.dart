@@ -178,6 +178,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('staff-gate')), findsOneWidget);
     expect(find.text('Staff only'), findsOneWidget);
+    expect(find.byKey(const Key('open-till')), findsNothing);
   });
 
   testWidgets('Shop shows the banner and promotion', (tester) async {
@@ -372,6 +373,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('open-till')), findsOneWidget);
     expect(find.byKey(const Key('store-settings')), findsOneWidget);
     await tester.tap(find.byKey(const Key('store-settings')));
     await tester.pumpAndSettle();

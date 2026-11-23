@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../state/providers.dart';
 import '../theme.dart';
 import 'store_settings_screen.dart';
+import 'till_screen.dart';
 
 class StaffScreen extends ConsumerWidget {
   const StaffScreen({super.key});
@@ -70,6 +71,18 @@ class StaffScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          ListTile(
+            key: const Key('open-till'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Open till'),
+            subtitle: const Text('Counter sale, scanner, and drawer'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TillScreen()),
+              );
+            },
+          ),
           ListTile(
             key: const Key('store-settings'),
             contentPadding: EdgeInsets.zero,

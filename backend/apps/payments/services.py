@@ -9,7 +9,6 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
-from apps.catalogue.models import Inventory
 from apps.core.exceptions import RekaAPIException
 from apps.orders.models import Order, OrderEvent, Payment, Shipment
 from apps.orders.services import OrderError, transition_order
@@ -76,7 +75,7 @@ def confirm_payment_from_webhook(
     try:
         payment = (
             Payment.objects.select_for_update()
-            .select_related("order")
+            .select_related("order", "order__store")
             .get(provider_reference=provider_reference)
         )
     except Payment.DoesNotExist:
@@ -117,14 +116,15 @@ def confirm_payment_from_webhook(
             actor=None,
             note=f"Payment confirmed via webhook ({payment.provider})",
         )
-        # Commit reserved stock
+        # Commit reserved stock. A till at a separate store does not touch the website warehouse.
+        from apps.pos.stock import locked_stock
+
         for item in order.items.select_related("variant").all():
             if not item.variant_id:
                 continue
-            inv = Inventory.objects.select_for_update().get(variant_id=item.variant_id)
-            inv.commit(item.quantity)
+            locked_stock(order, item.variant_id).commit(item.quantity)
 
-        if not order.shipments.exists():
+        if order.channel != Order.Channel.POS and not order.shipments.exists():
             Shipment.objects.create(order=order, status=Shipment.Status.PENDING)
         from apps.promotions.services import settle_order_discount
         from apps.promotions.specials import award_order_specials

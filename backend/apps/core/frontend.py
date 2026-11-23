@@ -12,6 +12,14 @@ FRONTEND_DIR = Path(settings.BASE_DIR).parent / "frontend"
 
 
 @require_GET
+def welcome_page(request):
+    page = FRONTEND_DIR / "site" / "index.html"
+    if not page.exists():
+        raise Http404("Reka site is not built.")
+    return HttpResponse(page.read_text(encoding="utf-8"), content_type="text/html; charset=utf-8")
+
+
+@require_GET
 def spa_index(request):
     index = FRONTEND_DIR / "index.html"
     if not index.exists():

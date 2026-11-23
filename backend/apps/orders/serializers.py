@@ -92,6 +92,7 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "reference",
+            "channel",
             "status",
             "currency",
             "subtotal",

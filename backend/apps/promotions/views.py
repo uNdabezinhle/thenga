@@ -156,6 +156,18 @@ class StaffAdDetailView(APIView):
     permission_classes = [IsAuthenticated, IsStaffRole]
 
     def patch(self, request, pk):
+        from apps.platform.services import has_addon, merchant_for
+
+        if not has_addon(merchant_for(request.user), "ads_self_serve"):
+            return Response(
+                {
+                    "error": {
+                        "code": "package_excluded",
+                        "message": "Reka Ads self-serve is a paid extra. Operated ads stay with Reka.",
+                    }
+                },
+                status=403,
+            )
         ad = get_object_or_404(ShopAd, pk=pk)
         data = request.data
         if "title" in data:

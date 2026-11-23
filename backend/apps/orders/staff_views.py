@@ -22,11 +22,18 @@ from .services import OrderError, advance_order, apply_courier_status, book_ship
 def staff_order_list(request):
     """GET /api/v1/orders/staff/ — all orders (ops)."""
     status_filter = request.query_params.get("status")
+    channel = request.query_params.get("channel")
     qs = Order.objects.prefetch_related(
         "items", "events", "shipments__events", "payments"
     ).order_by(
         "-placed_at"
     )
+    if channel == "all":
+        pass
+    elif channel:
+        qs = qs.filter(channel=channel)
+    else:
+        qs = qs.exclude(channel=Order.Channel.POS)
     if status_filter:
         qs = qs.filter(status=status_filter)
     qs = qs[:100]

@@ -40,6 +40,18 @@ class Brand(models.Model):
 
 
 class Product(models.Model):
+    class SaleChannel(models.TextChoices):
+        BOTH = "both", "Both"
+        ONLINE = "online", "Online"
+        POS = "pos", "Point of sale"
+
+    merchant = models.ForeignKey(
+        "platform.Merchant",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="products",
+    )
     sku = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=255)
     slug = models.SlugField(unique=True)
@@ -53,6 +65,9 @@ class Product(models.Model):
     base_price = models.DecimalField(max_digits=12, decimal_places=2)
     currency = models.CharField(max_length=3, default="ZAR")
     is_active = models.BooleanField(default=True)
+    sale_channel = models.CharField(
+        max_length=16, choices=SaleChannel.choices, default=SaleChannel.BOTH
+    )
     # ECTA s42(2) exclusions (e.g. custom goods, sealed audio) — no 7-day cooling-off
     cooling_off_excluded = models.BooleanField(
         default=False,
@@ -77,6 +92,7 @@ class Product(models.Model):
 class ProductVariant(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
     sku = models.CharField(max_length=64, unique=True)
+    barcode = models.CharField(max_length=64, unique=True, null=True, blank=True)
     label = models.CharField(max_length=120)
     price_delta = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     is_active = models.BooleanField(default=True)
