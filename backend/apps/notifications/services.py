@@ -13,6 +13,7 @@ from .models import NotificationLog, NotificationPreference
 logger = logging.getLogger(__name__)
 
 BRAND = getattr(settings, "REKA_SITE_BRAND_NAME", "Northbound")
+PLATFORM_NAME = "Reka"
 
 
 def get_or_create_prefs(user) -> NotificationPreference:
@@ -27,33 +28,46 @@ def send_email(
     template: str,
     context: dict[str, Any] | None = None,
     user=None,
+    merchant=None,
+    metadata: dict | None = None,
     transactional: bool = True,
 ) -> NotificationLog:
     """Render template and send. Marketing emails require consent."""
-    ctx = {"brand": BRAND, "public_base": settings.PUBLIC_API_BASE, **(context or {})}
+    brand = merchant.trading_name if merchant is not None else BRAND
+    footer = f"Sent with {PLATFORM_NAME}" if merchant is not None else ""
+    ctx = {
+        "brand": brand,
+        "platform_footer": footer,
+        "public_base": settings.PUBLIC_API_BASE,
+        **(context or {}),
+    }
+    extra = {"transactional": transactional, **(metadata or {})}
 
     if user and not transactional:
         prefs = get_or_create_prefs(user)
         if not prefs.email_marketing:
             log = NotificationLog.objects.create(
                 user=user,
+                merchant=merchant,
                 channel=NotificationLog.Channel.EMAIL,
                 template=template,
                 recipient=to,
                 subject=subject,
                 status=NotificationLog.Status.SKIPPED,
                 error="No marketing consent (POPIA s69)",
+                metadata=extra,
             )
             return log
 
     log = NotificationLog.objects.create(
         user=user,
+        merchant=merchant,
         channel=NotificationLog.Channel.EMAIL,
         template=template,
         recipient=to,
         subject=subject,
         status=NotificationLog.Status.QUEUED,
-        metadata={"transactional": transactional},
+        metadata=extra,
     )
 
     try:
@@ -89,17 +103,21 @@ def queue_or_send(**kwargs) -> NotificationLog:
         from .tasks import send_email_task
 
         user = kwargs.get("user")
+        merchant = kwargs.get("merchant")
         payload = {
             "to": kwargs["to"],
             "subject": kwargs["subject"],
             "template": kwargs["template"],
             "context": _json_safe_context(kwargs.get("context")),
             "transactional": kwargs.get("transactional", True),
+            "metadata": kwargs.get("metadata") or {},
             "user_id": user.id if user is not None else None,
+            "merchant_id": merchant.id if merchant is not None else None,
         }
         send_email_task.delay(payload)
         return NotificationLog.objects.create(
             user=user,
+            merchant=merchant,
             channel=NotificationLog.Channel.EMAIL,
             template=kwargs.get("template", ""),
             recipient=kwargs.get("to", ""),
@@ -157,10 +175,25 @@ def notify_password_reset(user, token: str) -> NotificationLog:
     )
 
 
+def _order_merchant(order):
+    from apps.platform.models import Merchant
+
+    ids = {
+        item.product.merchant_id
+        for item in order.items.select_related("product")
+        if item.product.merchant_id
+    }
+    if len(ids) != 1:
+        return None
+    return Merchant.objects.filter(pk=next(iter(ids))).first()
+
+
 def notify_order_confirmation(order) -> NotificationLog:
+    merchant = _order_merchant(order)
+    brand = merchant.trading_name if merchant is not None else BRAND
     return queue_or_send(
         to=order.user.email,
-        subject=f"{BRAND} order {order.reference} confirmed",
+        subject=f"{brand} order {order.reference} confirmed",
         template="order_confirmation",
         context={
             "order": order,
@@ -169,6 +202,7 @@ def notify_order_confirmation(order) -> NotificationLog:
             "currency": order.currency,
         },
         user=order.user,
+        merchant=merchant,
         transactional=True,
     )
 

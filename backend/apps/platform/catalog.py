@@ -47,4 +47,6 @@ ADDONS = (
 PACKAGE_BY_CODE = {row["code"]: row for row in PACKAGES}
 ADDON_BY_CODE = {row["code"]: row for row in ADDONS}
 MERCHANT_AD_SHARE_PERCENT = Decimal("30.00")
+# Illustrative rand attributed to one operated click. Not collected from shoppers.
+OPERATED_CLICK_GROSS = Decimal("1.00")
 TRIAL_DAYS = 14

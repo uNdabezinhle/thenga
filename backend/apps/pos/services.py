@@ -318,9 +318,9 @@ def _pay_now(order: Order, tender: str) -> None:
 
 
 def _payfast(order: Order) -> str:
-    from apps.payments.providers import PayfastProvider
+    from apps.payments.providers import payfast_for_order
 
-    session = PayfastProvider().create_checkout(
+    session = payfast_for_order(order).create_checkout(
         order_reference=order.reference,
         amount=order.grand_total,
         currency=order.currency,
@@ -401,9 +401,17 @@ def create_pos_sale(*, staff, payload: dict) -> dict:
     for line in expanded:
         _reserve(store, line["variant"].pk, line["quantity"], line["name"])
 
+    from apps.platform.services import single_merchant
+
+    sale_merchant = single_merchant(line["product"] for line in expanded)
+    if sale_merchant is None:
+        staff_merchant = merchant_for(staff)
+        if staff_merchant is not None and staff_merchant.slug != "northbound":
+            sale_merchant = staff_merchant
     order = Order.objects.create(
         reference=_new_reference(),
         user=buyer,
+        merchant=sale_merchant,
         store=store,
         channel=Order.Channel.POS,
         shipping_address_text="Collected in store",

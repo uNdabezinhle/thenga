@@ -1,0 +1,6 @@
+Hi,
+
+The {{ brand }} trial ends at {{ trial_ends }}. After that, new sales stop until a package is marked active. Saved products stay.
+
+— {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

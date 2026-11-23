@@ -247,6 +247,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "payments.run_daily_reconciliation",
         "schedule": 86400.0,  # daily
     },
+    "daily-merchant-reminders": {
+        "task": "notifications.send_reminders",
+        "schedule": 86400.0,
+    },
 }
 STALE_PAYMENT_HOURS = int(os.getenv("STALE_PAYMENT_HOURS", "2"))
 

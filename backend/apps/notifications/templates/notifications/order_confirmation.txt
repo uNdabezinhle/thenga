@@ -13,3 +13,4 @@ Items:
 We'll email you again when it ships.
 
 — {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

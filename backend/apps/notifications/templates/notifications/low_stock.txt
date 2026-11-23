@@ -1,0 +1,6 @@
+Hi,
+
+{{ sku }} has {{ available }} left at {{ brand }}.
+
+— {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

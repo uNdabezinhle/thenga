@@ -124,10 +124,15 @@ class OrderViewSet(
     def invoice(self, request, reference=None):
         """Tax invoice HTML — REKA-FR-ORD-013. Staff can open a counter receipt."""
         from apps.accounts.permissions import IsStaffRole
+        from apps.platform.services import merchant_for, order_scope
 
-        if IsStaffRole().has_permission(request, self):
+        merchant = merchant_for(request.user)
+        operator = IsStaffRole().has_permission(request, self) or (
+            merchant is not None and merchant.slug != "northbound"
+        )
+        if operator:
             order = (
-                Order.objects.filter(reference=reference)
+                Order.objects.filter(order_scope(request.user), reference=reference)
                 .prefetch_related("items")
                 .select_related("user")
                 .first()

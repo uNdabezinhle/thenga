@@ -77,6 +77,13 @@ class Order(models.Model):
         blank=True,
         related_name="orders",
     )
+    merchant = models.ForeignKey(
+        "platform.Merchant",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )

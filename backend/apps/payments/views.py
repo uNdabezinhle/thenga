@@ -271,7 +271,9 @@ def payfast_redirect(request):
     except (Order.DoesNotExist, Payment.DoesNotExist):
         return HttpResponse("Payment not found.", status=404)
 
-    provider = PayfastProvider()
+    from apps.payments.providers import payfast_for_order
+
+    provider = payfast_for_order(order)
     session = provider.create_checkout(
         order_reference=order.reference,
         amount=payment.amount,
@@ -309,11 +311,13 @@ def payfast_redirect(request):
 @require_POST
 def payfast_itn(request):
     """Payfast Instant Transaction Notification — signature verified (REKA-FR-PAY-003)."""
-    provider = PayfastProvider()
+    from apps.payments.providers import payfast_for_order
+
+    data = PayfastProvider().parse_itn(request.body)
+    order = Order.objects.filter(reference=data.get("m_payment_id") or "").select_related("merchant").first()
+    provider = payfast_for_order(order) if order is not None else PayfastProvider()
     if not provider.verify_webhook(request.body, None):
         return HttpResponse("Invalid signature", status=400)
-
-    data = provider.parse_itn(request.body)
     payment_status = (data.get("payment_status") or "").upper()
     m_payment_id = data.get("m_payment_id") or ""
     pf_payment_id = data.get("pf_payment_id") or ""

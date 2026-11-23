@@ -33,7 +33,16 @@ def initiate_payment(order: Order, *, payment_method: str, return_url: str = "")
     if existing:
         return existing
 
-    provider = get_provider(payment_method)
+    from apps.payments.providers import payfast_for_order
+
+    if payment_method in ("card", "eft", "payfast") and getattr(order, "merchant_id", None):
+        merchant_provider = payfast_for_order(order)
+        if merchant_provider.merchant_id and order.merchant.payfast_merchant_id:
+            provider = merchant_provider
+        else:
+            provider = get_provider(payment_method)
+    else:
+        provider = get_provider(payment_method)
     session = provider.create_checkout(
         order_reference=order.reference,
         amount=order.grand_total,

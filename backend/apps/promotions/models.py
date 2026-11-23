@@ -43,12 +43,62 @@ class ShopAd(models.Model):
     product_slug = models.CharField(max_length=160, blank=True)
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
+    source = models.CharField(
+        max_length=16,
+        choices=(("operated", "Operated by Reka"), ("self_serve", "Self-serve")),
+        default="operated",
+    )
+    merchant = models.ForeignKey(
+        "platform.Merchant",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="ads",
+    )
+    impression_count = models.PositiveIntegerField(default=0)
+    click_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["sort_order", "id"]
 
     def __str__(self):
         return self.title
+
+
+class AdEvent(models.Model):
+    """One placement view or click. Operated clicks feed the monthly share."""
+
+    class Kind(models.TextChoices):
+        IMPRESSION = "impression", "Impression"
+        CLICK = "click", "Click"
+
+    ad = models.ForeignKey(ShopAd, on_delete=models.CASCADE, related_name="events")
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["ad", "kind", "created_at"])]
+
+
+class AdShareStatement(models.Model):
+    """Monthly operated-ad share. Illustrative gross, not a shopper charge."""
+
+    merchant = models.ForeignKey(
+        "platform.Merchant", on_delete=models.CASCADE, related_name="ad_statements"
+    )
+    period = models.DateField()
+    clicks = models.PositiveIntegerField(default=0)
+    gross = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    share_percent = models.DecimalField(max_digits=5, decimal_places=2)
+    merchant_share = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    reka_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    emailed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["merchant", "period"], name="ad_statement_period"),
+        ]
+        ordering = ["-period"]
 
 
 class Bundle(models.Model):

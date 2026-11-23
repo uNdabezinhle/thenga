@@ -4,7 +4,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .inbox import mark_read, record_marketing_notice
-from .models import DeviceRegistration, InAppNotification, NotificationPreference
+from apps.accounts.permissions import IsStaffRole
+from apps.platform.services import merchant_for
+
+from .models import DeviceRegistration, InAppNotification, NotificationLog, NotificationPreference
 from .serializers import DeviceRegistrationSerializer, NotificationPreferenceSerializer
 from .services import get_or_create_prefs
 
@@ -31,6 +34,40 @@ class PreferenceView(APIView):
                 "Shared codes and your vouchers will show up here.",
             )
         return Response(ser.data)
+
+
+class MerchantLogView(APIView):
+    """Sent, skipped, and failed mail for this merchant. Not a second inbox."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        merchant = merchant_for(request.user)
+        if merchant is not None:
+            rows = NotificationLog.objects.filter(merchant=merchant)
+        elif IsStaffRole().has_permission(request, self):
+            rows = NotificationLog.objects.filter(merchant__isnull=True)
+        else:
+            return Response(
+                {"error": {"code": "permission_denied", "message": "Staff only."}},
+                status=403,
+            )
+        return Response(
+            {
+                "results": [
+                    {
+                        "id": row.id,
+                        "template": row.template,
+                        "recipient": row.recipient,
+                        "subject": row.subject,
+                        "status": row.status,
+                        "error": row.error,
+                        "created_at": row.created_at,
+                    }
+                    for row in rows[:100]
+                ]
+            }
+        )
 
 
 class DeviceViewSet(viewsets.ModelViewSet):

@@ -193,6 +193,16 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             except (TypeError, ValueError):
                 rating = 0
             body = str(request.data.get("body") or "").strip()
+            from apps.orders.services import OrderError
+            from apps.platform.services import require_addon
+
+            try:
+                require_addon(product.merchant, "reviews")
+            except OrderError as exc:
+                return Response(
+                    {"error": {"code": exc.default_code, "message": str(exc.detail)}},
+                    status=exc.status_code,
+                )
             if rating < 1 or rating > 5 or not body:
                 return Response(
                     {"rating": "Choose 1 to 5 stars and write a short review."},

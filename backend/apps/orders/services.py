@@ -70,15 +70,11 @@ def place_order(
     if not items:
         raise OrderError("Cart is empty.", code="cart_empty")
 
-    from apps.platform.services import require_feature
+    from apps.platform.services import require_feature, single_merchant
 
-    seen = set()
-    for item in items:
-        merchant = getattr(item.product, "merchant", None)
-        if merchant is None or merchant.pk in seen:
-            continue
-        seen.add(merchant.pk)
-        require_feature(merchant, "shop")
+    shop = single_merchant(item.product for item in items)
+    if shop is not None:
+        require_feature(shop, "shop")
 
     ensure_shipping_estimates(cart)
     totals = cart_totals(cart)
@@ -111,6 +107,7 @@ def place_order(
     order = Order.objects.create(
         reference=ref,
         user=user,
+        merchant=shop,
         shipping_address=address,
         shipping_address_text=address_text
         or (address.as_single_line() if address else ""),
@@ -237,6 +234,10 @@ def book_shipment(order: Order, actor=None) -> Order:
             "Counter sales are collected in store.",
             code="pos_not_dispatchable",
         )
+    from apps.platform.services import merchants_on_order, require_addon
+
+    for merchant in merchants_on_order(order):
+        require_addon(merchant, "delivery")
     order = Order.objects.select_for_update().get(pk=order.pk)
     shipment = order.shipments.select_for_update().first()
     if shipment and shipment.tracking_number:

@@ -69,6 +69,13 @@ class NotificationLog(models.Model):
         blank=True,
         related_name="notification_logs",
     )
+    merchant = models.ForeignKey(
+        "platform.Merchant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notification_logs",
+    )
     channel = models.CharField(max_length=16, choices=Channel.choices)
     template = models.CharField(max_length=64)
     recipient = models.CharField(max_length=255)

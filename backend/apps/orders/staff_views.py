@@ -4,10 +4,25 @@ from __future__ import annotations
 from decimal import Decimal
 
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsStaffRole
+from apps.platform.services import merchant_for, order_scope
+
+
+class IsOrderOperator(BasePermission):
+    """Sample staff, or a member of one merchant. Not every shopper."""
+
+    def has_permission(self, request, view):
+        if IsStaffRole().has_permission(request, view):
+            return True
+        merchant = merchant_for(getattr(request, "user", None))
+        return merchant is not None and merchant.slug != "northbound"
+
+
+def _operator_orders(user):
+    return Order.objects.filter(order_scope(user))
 from apps.cart.models import ShippingEstimate
 from apps.pricing.services import money_str
 
@@ -18,12 +33,12 @@ from .services import OrderError, advance_order, apply_courier_status, book_ship
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsStaffRole])
+@permission_classes([IsAuthenticated, IsOrderOperator])
 def staff_order_list(request):
-    """GET /api/v1/orders/staff/ — all orders (ops)."""
+    """GET /api/v1/orders/staff/ — this merchant's orders, or the sample shop."""
     status_filter = request.query_params.get("status")
     channel = request.query_params.get("channel")
-    qs = Order.objects.prefetch_related(
+    qs = _operator_orders(request.user).prefetch_related(
         "items", "events", "shipments__events", "payments"
     ).order_by(
         "-placed_at"
@@ -41,10 +56,10 @@ def staff_order_list(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsStaffRole])
+@permission_classes([IsAuthenticated, IsOrderOperator])
 def staff_order_detail(request, reference):
     try:
-        order = Order.objects.prefetch_related(
+        order = _operator_orders(request.user).prefetch_related(
             "items", "events", "shipments__events", "payments"
         ).get(reference=reference)
     except Order.DoesNotExist:
@@ -62,10 +77,10 @@ def staff_order_detail(request, reference):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsStaffRole])
+@permission_classes([IsAuthenticated, IsOrderOperator])
 def staff_advance(request, reference):
     try:
-        order = Order.objects.get(reference=reference)
+        order = _operator_orders(request.user).get(reference=reference)
     except Order.DoesNotExist:
         return Response(
             {
@@ -126,11 +141,11 @@ def _with_shipment(order: Order) -> Order:
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsStaffRole])
+@permission_classes([IsAuthenticated, IsOrderOperator])
 def staff_dispatch(request, reference):
     """Book the sandbox courier for a packed order."""
     try:
-        order = Order.objects.get(reference=reference)
+        order = _operator_orders(request.user).get(reference=reference)
     except Order.DoesNotExist:
         return _missing(request)
     try:
@@ -141,11 +156,11 @@ def staff_dispatch(request, reference):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsStaffRole])
+@permission_classes([IsAuthenticated, IsOrderOperator])
 def staff_courier(request, reference):
     """Move a booked shipment to in_transit or delivered."""
     try:
-        order = Order.objects.get(reference=reference)
+        order = _operator_orders(request.user).get(reference=reference)
     except Order.DoesNotExist:
         return _missing(request)
     status = str(request.data.get("status") or "")
@@ -184,6 +199,15 @@ def staff_shipping_rates(request):
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated, IsStaffRole])
 def staff_shipping_rate_update(request, pk):
+    from apps.platform.services import merchant_for, require_addon
+
+    try:
+        require_addon(merchant_for(request.user), "delivery")
+    except OrderError as exc:
+        return Response(
+            {"error": {"code": exc.default_code, "message": str(exc.detail)}},
+            status=exc.status_code,
+        )
     try:
         rate = ShippingRate.objects.get(pk=pk)
     except ShippingRate.DoesNotExist:

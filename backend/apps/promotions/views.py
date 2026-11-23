@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -12,7 +12,10 @@ from apps.cart.models import Coupon
 from apps.catalogue.models import Product
 from apps.pricing.services import money_str
 
-from .models import ShopAd
+from apps.platform.services import has_addon, merchant_for
+
+from .ads import public_ads, record_event
+from .models import AdEvent, ShopAd
 from .services import coupon_is_live
 
 
@@ -44,7 +47,9 @@ class AdListView(APIView):
 
     def get(self, request):
         placement = request.query_params.get("placement") or ShopAd.Placement.SHOP_TOP
-        ads = ShopAd.objects.filter(is_active=True, placement=placement)
+        ads = list(public_ads(placement))
+        for ad in ads:
+            record_event(ad, AdEvent.Kind.IMPRESSION)
         slugs = [ad.product_slug for ad in ads if ad.product_slug]
         products = {
             product.slug: product.id
@@ -143,22 +148,37 @@ class StaffPromotionDetailView(APIView):
         return Response(_coupon_payload(coupon))
 
 
+class IsAdEditor(BasePermission):
+    def has_permission(self, request, view):
+        if IsStaffRole().has_permission(request, view):
+            return True
+        merchant = merchant_for(request.user)
+        return merchant is not None and merchant.slug != "northbound"
+
+
+class AdClickView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request, pk):
+        ad = get_object_or_404(ShopAd.objects.select_related("merchant"), pk=pk, is_active=True)
+        if ad.source == "operated" and ad.merchant_id and not ad.merchant.operated_ads:
+            return Response({"error": {"code": "not_found", "message": "Ad not found."}}, status=404)
+        record_event(ad, AdEvent.Kind.CLICK)
+        return Response({"id": ad.id, "recorded": "click"})
+
+
 class StaffAdListView(APIView):
-    permission_classes = [IsAuthenticated, IsStaffRole]
+    permission_classes = [IsAuthenticated, IsAdEditor]
 
     def get(self, request):
         ads = list(ShopAd.objects.all())
         products = _product_ids(ads)
         return Response({"results": [_ad_payload(ad, products) for ad in ads]})
 
-
-class StaffAdDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsStaffRole]
-
-    def patch(self, request, pk):
-        from apps.platform.services import has_addon, merchant_for
-
-        if not has_addon(merchant_for(request.user), "ads_self_serve"):
+    def post(self, request):
+        merchant = merchant_for(request.user)
+        if not has_addon(merchant, "ads_self_serve"):
             return Response(
                 {
                     "error": {
@@ -168,8 +188,52 @@ class StaffAdDetailView(APIView):
                 },
                 status=403,
             )
+        title = str(request.data.get("title") or "").strip()
+        if not title:
+            return Response({"title": "Enter a title."}, status=400)
+        ad = ShopAd.objects.create(
+            title=title[:120],
+            body=str(request.data.get("body") or "")[:255],
+            product_slug=str(request.data.get("product_slug") or "")[:160],
+            source="self_serve",
+            merchant=None if merchant is None or merchant.slug == "northbound" else merchant,
+        )
+        return Response(_ad_payload(ad, _product_ids([ad])), status=201)
+
+
+class StaffAdDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsAdEditor]
+
+    def patch(self, request, pk):
         ad = get_object_or_404(ShopAd, pk=pk)
         data = request.data
+        merchant = merchant_for(request.user)
+        real = merchant is not None and merchant.slug != "northbound"
+        if ad.source == "operated" and real:
+            if set(data.keys()) - {"is_active"}:
+                return Response(
+                    {
+                        "error": {
+                            "code": "package_excluded",
+                            "message": "Reka writes operated ads. You can turn the placement off.",
+                        }
+                    },
+                    status=403,
+                )
+            if "is_active" in data:
+                ad.is_active = bool(data.get("is_active"))
+                ad.save(update_fields=["is_active"])
+            return Response(_ad_payload(ad, _product_ids([ad])))
+        if not has_addon(merchant, "ads_self_serve"):
+            return Response(
+                {
+                    "error": {
+                        "code": "package_excluded",
+                        "message": "Reka Ads self-serve is a paid extra. Operated ads stay with Reka.",
+                    }
+                },
+                status=403,
+            )
         if "title" in data:
             title = str(data.get("title") or "").strip()
             if not title:

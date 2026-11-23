@@ -133,7 +133,11 @@ class StaffFlashDetailView(APIView):
     permission_classes = [IsAuthenticated, IsStaffRole]
 
     def patch(self, request, pk):
+        from apps.platform.services import merchant_for, require_addon
+
         row = get_object_or_404(FlashPrice.objects.select_related("product"), pk=pk)
+        require_addon(merchant_for(request.user), "specials")
+        require_addon(row.product.merchant, "specials")
         data = request.data
         if "sale_price" in data:
             try:

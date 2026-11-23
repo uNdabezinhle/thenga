@@ -9,3 +9,4 @@ Reference: {{ provider_reference }}
 Funds typically return to the original payment method within a few business days.
 
 — {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

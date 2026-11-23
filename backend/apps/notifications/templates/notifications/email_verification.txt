@@ -9,3 +9,4 @@ Or open: {{ link }}
 This link expires in 24 hours and can only be used once.
 
 — {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

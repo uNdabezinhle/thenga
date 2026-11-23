@@ -1,0 +1,8 @@
+Hi,
+
+{{ brand }} is still waiting for payment on {{ reference }}.
+
+The stock stays reserved until the payment is confirmed or the checkout is released.
+
+— {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

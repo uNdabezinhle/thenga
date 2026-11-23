@@ -1,0 +1,13 @@
+Hi,
+
+Reka Ads statement for {{ period }}.
+
+Operated clicks: {{ clicks }}
+Gross: ZAR {{ gross }}
+Your share: ZAR {{ merchant_share }}
+Reka fee: ZAR {{ reka_fee }}
+
+These amounts are a record of the share. They are not collected from shoppers.
+
+— {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

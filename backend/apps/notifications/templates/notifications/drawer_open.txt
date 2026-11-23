@@ -1,0 +1,6 @@
+Hi,
+
+The till drawer at {{ store }} was still open at the start of the day. Count the cash and close it.
+
+— {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}

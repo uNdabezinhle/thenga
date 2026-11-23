@@ -27,6 +27,13 @@ def send_email_task(self, payload: dict):
     if user_id:
         user = User.objects.filter(pk=user_id).first()
 
+    from apps.platform.models import Merchant
+
+    merchant = None
+    merchant_id = payload.pop("merchant_id", None)
+    if merchant_id:
+        merchant = Merchant.objects.filter(pk=merchant_id).first()
+
     context = dict(payload.pop("context", None) or {})
     if "user_id" in context and user:
         context["user"] = user
@@ -40,5 +47,12 @@ def send_email_task(self, payload: dict):
             if shipment and "tracking" not in context:
                 context["tracking"] = shipment.tracking_number
 
-    result = send_email(user=user, context=context, **payload)
+    result = send_email(user=user, merchant=merchant, context=context, **payload)
     return {"status": result.status, "log_id": result.id}
+
+
+@shared_task(name="notifications.send_reminders")
+def send_reminders():
+    from .reminders import run_reminders
+
+    return run_reminders()

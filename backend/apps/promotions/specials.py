@@ -89,6 +89,18 @@ def award_order_specials(order) -> None:
         return
     from apps.pos.constants import COUNTER_EMAIL
 
+    from apps.platform.services import has_addon
+
+    merchants = {
+        item.product.merchant
+        for item in order.items.select_related("product")
+        if item.product.merchant_id
+    }
+    if merchants and any(not has_addon(merchant, "loyalty") for merchant in merchants):
+        order.loyalty_points = 0
+        order.specials_awarded = True
+        order.save(update_fields=["loyalty_points", "specials_awarded"])
+        return
     if (order.user.email or "").lower() == COUNTER_EMAIL:
         order.loyalty_points = 0
         order.specials_awarded = True
@@ -171,6 +183,9 @@ def reverse_order_specials(order) -> None:
 
 @transaction.atomic
 def redeem_points(user) -> Voucher:
+    from apps.platform.services import merchant_for, require_addon
+
+    require_addon(merchant_for(user), "loyalty")
     account = LoyaltyAccount.objects.select_for_update().get_or_create(user=user)[0]
     if account.points < REDEEM_POINTS:
         raise BundleLocked("You need 100 points to redeem R10.")
@@ -185,6 +200,9 @@ def redeem_points(user) -> Voucher:
 
 
 def attach_referrer(user, code: str) -> ReferralProfile:
+    from apps.platform.services import merchant_for, require_addon
+
+    require_addon(merchant_for(user), "loyalty")
     cleaned = (code or "").strip().upper()
     if not cleaned:
         raise BundleLocked("Enter a referral code.")
@@ -237,6 +255,10 @@ def add_bundle_to_cart(cart: Cart, bundle: Bundle) -> Cart:
     components = list(bundle.items.select_related("product", "variant", "variant__inventory"))
     if not components:
         raise BundleLocked("This bundle is empty.")
+    from apps.platform.services import require_addon
+
+    for component in components:
+        require_addon(component.product.merchant, "specials")
     for component in components:
         if cart.items.filter(product=component.product, variant=component.variant).exists():
             raise BundleLocked("Those products are already in the cart.")

@@ -26,6 +26,10 @@ class Merchant(models.Model):
         default=True,
         help_text="Reka may place operated ads. The merchant cannot edit those creatives.",
     )
+    payfast_merchant_id = models.CharField(max_length=64, blank=True)
+    payfast_merchant_key = models.CharField(max_length=64, blank=True)
+    payfast_passphrase = models.CharField(max_length=128, blank=True)
+    payfast_sandbox = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

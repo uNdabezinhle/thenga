@@ -180,11 +180,14 @@ class PayfastProvider:
 
     name = "payfast"
 
-    def __init__(self):
-        self.merchant_id = getattr(settings, "PAYFAST_MERCHANT_ID", "") or ""
-        self.merchant_key = getattr(settings, "PAYFAST_MERCHANT_KEY", "") or ""
-        self.passphrase = getattr(settings, "PAYFAST_PASSPHRASE", "") or ""
-        self.sandbox = getattr(settings, "PAYFAST_SANDBOX", True)
+    def __init__(self, merchant_id="", merchant_key="", passphrase="", sandbox=None):
+        self.merchant_id = merchant_id or getattr(settings, "PAYFAST_MERCHANT_ID", "") or ""
+        self.merchant_key = merchant_key or getattr(settings, "PAYFAST_MERCHANT_KEY", "") or ""
+        self.passphrase = passphrase or getattr(settings, "PAYFAST_PASSPHRASE", "") or ""
+        if sandbox is None:
+            self.sandbox = getattr(settings, "PAYFAST_SANDBOX", True)
+        else:
+            self.sandbox = sandbox
 
     @property
     def process_url(self) -> str:
@@ -258,6 +261,23 @@ class PayfastProvider:
 
         raw = parse_qs(payload.decode("utf-8"), keep_blank_values=True)
         return {k: (v[0] if v else "") for k, v in raw.items()}
+
+
+def payfast_for_order(order):
+    """Use a merchant's own keys when live PayFast is on. Otherwise the server provider."""
+    merchant = getattr(order, "merchant", None)
+    if merchant is None or not merchant.payfast_merchant_id or not merchant.payfast_merchant_key:
+        return PayfastProvider()
+    from apps.platform.services import has_addon
+
+    if not has_addon(merchant, "live_payfast"):
+        return PayfastProvider()
+    return PayfastProvider(
+        merchant_id=merchant.payfast_merchant_id,
+        merchant_key=merchant.payfast_merchant_key,
+        passphrase=merchant.payfast_passphrase,
+        sandbox=merchant.payfast_sandbox,
+    )
 
 
 def get_card_provider() -> PaymentProvider:

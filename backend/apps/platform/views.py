@@ -1,6 +1,7 @@
 """Public package list and merchant onboarding."""
 from __future__ import annotations
 
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -10,7 +11,18 @@ from apps.orders.services import OrderError
 from apps.pricing.services import money_str
 
 from .catalog import ADDONS, MERCHANT_AD_SHARE_PERCENT, PACKAGES
-from .services import checklist, merchant_for, open_merchant
+from apps.promotions.ads import statement_for
+
+from .models import MerchantMembership
+from .services import (
+    add_store,
+    checklist,
+    import_catalogue,
+    invite_staff,
+    merchant_for,
+    open_merchant,
+    save_payfast,
+)
 
 
 def _fail(exc: RekaAPIException):
@@ -76,6 +88,88 @@ def onboard(request):
     except OrderError as exc:
         return _fail(exc)
     return Response(checklist(merchant, request.user), status=201)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def ad_desk(request):
+    merchant = merchant_for(request.user)
+    if merchant is None:
+        return Response(
+            {"error": {"code": "permission_denied", "message": "Open a shop first."}},
+            status=403,
+        )
+    if request.method == "PATCH":
+        role = (
+            MerchantMembership.objects.filter(merchant=merchant, user=request.user)
+            .values_list("role", flat=True)
+            .first()
+        )
+        if role != MerchantMembership.Role.OWNER:
+            return Response(
+                {"error": {"code": "permission_denied", "message": "Only the owner can change ads."}},
+                status=403,
+            )
+        if "operated_ads" in request.data:
+            merchant.operated_ads = bool(request.data.get("operated_ads"))
+            merchant.save(update_fields=["operated_ads"])
+    today = timezone.now().date().replace(day=1)
+    return Response(
+        {
+            "operated_ads": merchant.operated_ads,
+            "statement": statement_for(merchant, today),
+        }
+    )
+
+
+def _owner_call(fn, request):
+    try:
+        return fn(request.user, request.data)
+    except OrderError as exc:
+        return _fail(exc)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def staff_invite(request):
+    result = _owner_call(invite_staff, request)
+    if isinstance(result, Response):
+        return result
+    return Response(result, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def catalogue_import(request):
+    result = _owner_call(import_catalogue, request)
+    if isinstance(result, Response):
+        return result
+    return Response({"results": result}, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def store_create(request):
+    result = _owner_call(add_store, request)
+    if isinstance(result, Response):
+        return result
+    return Response(
+        {
+            "code": result.code,
+            "name": result.name,
+            "sells_online": result.sells_online,
+        },
+        status=201,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def payfast_keys(request):
+    result = _owner_call(save_payfast, request)
+    if isinstance(result, Response):
+        return result
+    return Response(result)
 
 
 @api_view(["GET"])

@@ -5,3 +5,4 @@ Good news — {{ brand }} order {{ order.reference }} is on its way.
 {% if tracking %}Tracking: {{ tracking }}{% endif %}
 
 — {{ brand }}
+{% if platform_footer %}{{ platform_footer }}{% endif %}
