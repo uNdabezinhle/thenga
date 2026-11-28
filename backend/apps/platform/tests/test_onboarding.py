@@ -222,6 +222,40 @@ class PlatformTests(TestCase):
         own = self.client.get(f"/api/v1/ads/?placement=shop_top&merchant={merchant.slug}")
         self.assertEqual([row["title"] for row in own.json()["results"]], ["Kiosk banner"])
 
+    def test_till_package_hides_the_shop_and_names_the_counter(self):
+        opened = self._open("till")
+        slug = opened.json()["slug"]
+        chosen = self.client.post(
+            "/api/v1/platform/package/",
+            data=json.dumps({"package": "till"}),
+            content_type="application/json",
+            **self._auth(self.owner),
+        )
+        self.assertEqual(chosen.status_code, 200, chosen.content)
+        me = self.client.get("/api/v1/auth/users/me/", **self._auth(self.owner))
+        self.assertEqual(me.status_code, 200, me.content)
+        body = me.json()
+        self.assertFalse(body["shop"])
+        self.assertTrue(body["pos"])
+        self.assertEqual(body["merchant_slug"], slug)
+        self.assertEqual(body["merchant_name"], "Kiosk")
+        self.assertFalse(body["is_staff_ops"])
+        sample_staff = self.client.get("/api/v1/auth/users/me/", **self._auth(self.staff))
+        self.assertTrue(sample_staff.json()["shop"])
+        self.assertTrue(sample_staff.json()["pos"])
+        self.assertEqual(sample_staff.json()["merchant_slug"], "")
+        public = self.client.get(f"/api/v1/platform/shops/{slug}/")
+        self.assertEqual(public.status_code, 200, public.content)
+        self.assertEqual(public.json()["trading_name"], "Kiosk")
+        self.assertFalse(public.json()["shop"])
+        self.assertTrue(public.json()["pos"])
+        self.assertNotIn("payfast", public.content.decode())
+        missing = self.client.get("/api/v1/platform/shops/missing-shop/")
+        self.assertEqual(missing.status_code, 404)
+        sample = self.client.get("/api/v1/platform/shops/northbound/")
+        self.assertTrue(sample.json()["shop"])
+        self.assertTrue(sample.json()["pos"])
+
     def test_self_serve_ads_need_the_extra(self):
         self._open("shop")
         merchant = Merchant.objects.get(trading_name="Kiosk")

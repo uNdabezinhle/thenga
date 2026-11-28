@@ -341,6 +341,10 @@ class UserMe {
     required this.isStaffOps,
     this.displayName = '',
     this.mfaEnabled = false,
+    this.shop = true,
+    this.pos = true,
+    this.merchantSlug = '',
+    this.merchantName = '',
   });
 
   final int id;
@@ -350,6 +354,13 @@ class UserMe {
   final bool isStaffOps;
   final String displayName;
   final bool mfaEnabled;
+  final bool shop;
+  final bool pos;
+  final String merchantSlug;
+  final String merchantName;
+
+  bool get runsTill => isStaffOps || (merchantSlug.isNotEmpty && pos);
+  bool get runsShop => shop;
 
   String get name => displayName.isNotEmpty ? displayName : username;
 
@@ -363,6 +374,10 @@ class UserMe {
             json['is_staff_ops'] as bool? ?? json['is_staff'] as bool? ?? false,
         displayName: displayName ?? asString(json['display_name']),
         mfaEnabled: json['mfa_enabled'] as bool? ?? false,
+        shop: json['shop'] as bool? ?? true,
+        pos: json['pos'] as bool? ?? true,
+        merchantSlug: asString(json['merchant_slug']),
+        merchantName: asString(json['merchant_name']),
       );
 }
 

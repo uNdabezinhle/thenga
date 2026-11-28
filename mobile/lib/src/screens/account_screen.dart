@@ -49,7 +49,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         ref.invalidate(ordersProvider);
         ref.invalidate(savedProvider);
         await ref.read(cartProvider.notifier).refresh();
-        if (user.isStaffOps) {
+        if (user.isStaffOps || !user.shop) {
           ref.read(shellTabProvider.notifier).state = NbTab.staff;
         } else {
           ref.read(shellTabProvider.notifier).state = NbTab.shop;
@@ -331,7 +331,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               );
             },
           ),
-          if (user.isStaffOps)
+          if (user.isStaffOps || user.merchantSlug.isNotEmpty)
             ListTile(
               title: const Text('Staff console'),
               subtitle: const Text('Orders, refunds, reconciliation'),

@@ -69,8 +69,53 @@ class UserSerializer(serializers.ModelSerializer):
             "is_staff",
             "is_staff_ops",
             "mfa_enabled",
+            "shop",
+            "pos",
+            "merchant_slug",
+            "merchant_name",
         )
         read_only_fields = fields
+
+    shop = serializers.SerializerMethodField()
+    pos = serializers.SerializerMethodField()
+    merchant_slug = serializers.SerializerMethodField()
+    merchant_name = serializers.SerializerMethodField()
+
+    def _desk(self, obj):
+        from apps.platform.catalog import SAMPLE_SLUG
+        from apps.platform.services import merchant_for, selling_features
+
+        cached = getattr(self, "_desk_cache", None)
+        if cached is None:
+            cached = {}
+            self._desk_cache = cached
+        if obj.pk in cached:
+            return cached[obj.pk]
+        merchant = merchant_for(obj)
+        if merchant is None or merchant.slug == SAMPLE_SLUG:
+            row = {"shop": True, "pos": True, "merchant_slug": "", "merchant_name": ""}
+        else:
+            flags = selling_features(merchant)
+            row = {
+                "shop": flags["shop"],
+                "pos": flags["pos"],
+                "merchant_slug": merchant.slug,
+                "merchant_name": merchant.trading_name,
+            }
+        cached[obj.pk] = row
+        return row
+
+    def get_shop(self, obj):
+        return self._desk(obj)["shop"]
+
+    def get_pos(self, obj):
+        return self._desk(obj)["pos"]
+
+    def get_merchant_slug(self, obj):
+        return self._desk(obj)["merchant_slug"]
+
+    def get_merchant_name(self, obj):
+        return self._desk(obj)["merchant_name"]
 
     def get_mfa_enabled(self, obj):
         return obj.mfa_devices.filter(is_active=True).exists()

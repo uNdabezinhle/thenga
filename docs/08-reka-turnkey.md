@@ -9,7 +9,7 @@ Reka is the platform. Northbound is the sample merchant on a hosted install. A t
 3. A 14-day trial has both shop and till. After that, new sales stop until the package is marked active.
 4. `GET /api/v1/platform/onboarding/status/` is the go-live checklist.
 5. The owner confirms the package with `POST /api/v1/platform/package/` (`package`, optional `addons`). That marks the shop active and does not collect the illustrative price. A downgrade keeps products and orders. Staff cannot confirm it.
-6. The public shop is `/?merchant=<slug>` on the phone demo and on Flutter web, and `GET /api/v1/products/?merchant=<slug>`. With no slug, the sample shop is Northbound. Ads on that address are only that shop’s banners. A till-only shop returns an empty catalogue.
+6. The public shop is `/?merchant=<slug>` on the phone demo and on Flutter web, and `GET /api/v1/products/?merchant=<slug>`. `GET /api/v1/platform/shops/<slug>/` returns the trading name and whether shop and till are on. It does not return keys. With no slug, the sample shop is Northbound. Ads on that address are only that shop’s banners. A till-only shop has no online checkout, and the owner opens the till without being site staff. A shop-only package hides the till.
 7. Prices from `GET /api/v1/platform/packages/` are illustrative. They are not collected.
 
 ## Self-hosted

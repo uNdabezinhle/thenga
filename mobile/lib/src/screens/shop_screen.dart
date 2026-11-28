@@ -14,6 +14,23 @@ class ShopScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final products = ref.watch(productsProvider);
     final user = ref.watch(authStateProvider).valueOrNull?.user;
+    final face = ref.watch(shopFaceProvider).valueOrNull ?? ShopFace.northbound;
+    final counterOnly = shopMerchantSlug().isNotEmpty ? !face.shop : user?.shop == false;
+    if (counterOnly) {
+      return Scaffold(
+        appBar: AppBar(title: Text(face.tradingName)),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'This shop sells at the counter. There is no online checkout.',
+              textAlign: TextAlign.center,
+              key: Key('counter-only'),
+            ),
+          ),
+        ),
+      );
+    }
     final query = ref.watch(catalogueQueryProvider);
     final categories = ref.watch(categoriesProvider).valueOrNull ?? kCategories;
     final ads = ref.watch(adsProvider).valueOrNull ?? const <ShopAd>[];
@@ -26,7 +43,7 @@ class ShopScreen extends ConsumerWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(shopMerchantSlug().isEmpty ? 'Northbound' : shopMerchantSlug()),
+            Text(face.tradingName.isEmpty ? 'Northbound' : face.tradingName),
             Text(
               user == null ? 'Browsing as a guest' : 'Welcome back, ${user.name}',
               style: const TextStyle(

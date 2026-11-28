@@ -5,6 +5,18 @@
 const API_BASE = (window.REKA_API_BASE ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
 const APP_VERSION = '1.0.0 (build 1)';
 const SHOP_MERCHANT = (new URLSearchParams(location.search).get('merchant') || '').trim().toLowerCase();
+function sellsOnline(){
+  if (SHOP_MERCHANT) return !S.face || S.face.shop !== false;
+  return !S.user || S.user.shop !== false;
+}
+function canOperate(){
+  if (!S.user) return false;
+  if (S.user.is_staff_ops) return true;
+  return !!(S.user.merchant_slug && (S.user.pos !== false || S.user.shop !== false));
+}
+function canTill(){
+  return canOperate() && (!S.user || S.user.pos !== false);
+}
 function shopPath(path) {
   if (!SHOP_MERCHANT) return path;
   return path + (path.includes('?') ? '&' : '?') + 'merchant=' + encodeURIComponent(SHOP_MERCHANT);
@@ -117,6 +129,7 @@ const S = {
   checkout:{addr:'14 Harbour Lane, Cape Town 8001', pay:'card'},
   expanded:new Set(),
   ready:false,
+  face: { slug:'', trading_name:'Northbound', shop:true, pos:true, read_only:false },
   lastMs: 0,
   staffOrders: [],
   recon: null,
@@ -357,7 +370,7 @@ async function loadOrders(){
 }
 
 async function loadStaffOrders(){
-  if (!S.user || !S.user.is_staff_ops) { S.staffOrders = []; return; }
+  if (!canOperate()) { S.staffOrders = []; return; }
   const q = S.staffFilter ? ('?status=' + encodeURIComponent(S.staffFilter)) : '';
   const { ok, data } = await api('GET', '/api/v1/orders/staff/', {
     path: '/api/v1/orders/staff/' + q,
@@ -384,11 +397,16 @@ async function loadProduct(id){
 /* ---------- screens ---------- */
 function scShop(){
   const list = S.products;
+  const title = (S.face && S.face.trading_name) || 'Northbound';
+  if (!sellsOnline()) {
+    return `<div class="screen"><div class="appbar"><div style="flex:1"><h1>${esc(title)}</h1></div></div>
+      <div class="empty"><h3>Counter only</h3><p class="muted">This shop sells at the till. There is no online checkout.</p></div></div>`;
+  }
   return `
   <div class="screen">
     <div class="appbar">
       <div style="flex:1">
-        <h1>${SHOP_MERCHANT ? esc(SHOP_MERCHANT) : 'Northbound'}</h1>
+        <h1>${esc(title)}</h1>
         <div class="sub">${S.user ? 'Welcome back, ' + esc((S.user.name||'').split(' ')[0] || S.user.username) : 'Browsing as a guest'}</div>
       </div>
       <button class="iconbtn" data-act="tab" data-v="search" aria-label="Search">${ICO.search}</button>
@@ -754,7 +772,7 @@ function scProfile(){
         <span style="color:var(--mute)">${ICO.chev}</span>
       </button>
 
-      ${S.user.is_staff_ops ? `
+      ${canOperate() ? `
       <div class="h2">Operations</div>
       <button class="card between" style="width:100%;text-align:left" data-act="tab" data-v="staff">
         <span><b style="font-size:13.5px">Staff console</b>
@@ -766,7 +784,7 @@ function scProfile(){
 }
 
 function scStaff(){
-  if (!S.user || !S.user.is_staff_ops) {
+  if (!canOperate()) {
     return `<div class="screen"><div class="appbar"><div style="flex:1"><h1>Staff</h1></div></div>
       <div class="empty"><h3>Staff only</h3><p class="muted">Sign in as staff@northbound.test</p></div></div>`;
   }
@@ -787,16 +805,16 @@ function scStaff(){
       <button class="iconbtn" data-act="staffrefresh" aria-label="Refresh">${ICO.search}</button>
     </div>
     <div class="body">
-      <button class="card between" style="width:100%;text-align:left;margin-bottom:10px" data-act="till">
+      ${canTill() ? `<button class="card between" style="width:100%;text-align:left;margin-bottom:10px" data-act="till">
         <span><b style="font-size:13.5px">Open till</b>
         <span class="muted" style="display:block;font-size:11.5px">Counter sale, scanner, and drawer</span></span>
         <span style="color:var(--mute)">${ICO.chev}</span>
-      </button>
-      <button class="card between" style="width:100%;text-align:left;margin-bottom:14px" data-act="store">
+      </button>` : ''}
+      ${(S.user.is_staff_ops && S.user.shop !== false) ? `<button class="card between" style="width:100%;text-align:left;margin-bottom:14px" data-act="store">
         <span><b style="font-size:13.5px">Store settings</b>
         <span class="muted" style="display:block;font-size:11.5px">Delivery, banner, and promotion</span></span>
         <span style="color:var(--mute)">${ICO.chev}</span>
-      </button>
+      </button>` : ''}
       ${recon ? `<div class="card" style="margin-bottom:14px">
         <div class="between"><b style="font-size:13px">Today’s recon</b>
           <span class="mono" style="font-size:11px;color:var(--mute)">${esc(recon.date)}</span></div>
@@ -823,7 +841,7 @@ function scStaff(){
           <div class="muted" style="font-size:11px;margin:4px 0 10px">${esc(o.status)} · ${o.item_count||0} items · ${esc(o.payment_method||'')}</div>
           ${shipmentLine(o)}
           <div class="row" style="gap:6px;flex-wrap:wrap">
-            ${!awaiting && o.status !== 'refunded' && o.status !== 'cancelled' ? `
+            ${sellsOnline() && !awaiting && o.status !== 'refunded' && o.status !== 'cancelled' ? `
               ${o.status === 'packed'
                 ? `<button class="btn sm ghost" data-act="staffdispatch" data-v="${esc(o.reference)}">Dispatch</button>`
                 : o.status === 'out_for_delivery'
@@ -1092,7 +1110,7 @@ async function syncPos(silent){
 }
 
 function scTill(){
-  if (!S.user || !S.user.is_staff_ops) {
+  if (!canTill()) {
     return `<div class="screen"><div class="appbar"><div style="flex:1"><h1>Till</h1></div></div>
       <div class="empty"><h3>Staff only</h3><p class="muted">Sign in as staff@northbound.test</p></div></div>`;
   }
@@ -1154,9 +1172,11 @@ const NAV = [
 ];
 
 function navItems(){
-  const items = [...NAV];
-  if (S.user && S.user.is_staff_ops) {
-    items.splice(4, 0, {k:'staff', l:'Ops', i:'staff'});
+  let items = [...NAV];
+  if (!sellsOnline()) items = items.filter(n => n.k === 'profile');
+  if (canOperate()) {
+    const at = items.findIndex(n => n.k === 'profile');
+    items.splice(at < 0 ? items.length : at, 0, {k:'staff', l:'Ops', i:'staff'});
   }
   return items;
 }
@@ -1295,6 +1315,10 @@ async function finishLogin(tokens, profile){
     mfa: !!profile.mfa,
     is_staff: !!profile.is_staff,
     is_staff_ops: !!(profile.is_staff_ops || profile.is_staff),
+    shop: profile.shop !== false,
+    pos: profile.pos !== false,
+    merchant_slug: profile.merchant_slug || '',
+    merchant_name: profile.merchant_name || '',
     backup: null,
   };
   S.mfaPending = null;
@@ -1310,19 +1334,21 @@ async function finishLogin(tokens, profile){
   await loadOrders();
   await loadSaved();
   await loadInbox();
-  if (S.user.is_staff_ops) {
+  if (S.user.is_staff_ops || (canOperate() && !sellsOnline())) {
     await loadStaffOrders();
-    await loadRecon();
+    if (S.user.is_staff_ops) await loadRecon();
     go('staff', 'staff');
-  } else {
+  } else if (sellsOnline()) {
     go('shop', 'shop');
+  } else {
+    go('profile', 'profile');
   }
 }
 
 const ACTIONS = {
   async tab(v){
     if (v === 'profile' && !S.user){ S.tab = 'profile'; S.screen = 'profile'; S.authView = 'login'; render(); return; }
-    if (v === 'staff' && (!S.user || !S.user.is_staff_ops)) {
+    if (v === 'staff' && !canOperate()) {
       snack('Staff sign-in required'); go('profile','profile'); return;
     }
     S.tab = v;
@@ -1611,6 +1637,10 @@ const ACTIONS = {
       email_verified: me.data?.email_verified,
       is_staff: me.data?.is_staff,
       is_staff_ops: me.data?.is_staff_ops,
+      shop: me.data?.shop,
+      pos: me.data?.pos,
+      merchant_slug: me.data?.merchant_slug,
+      merchant_name: me.data?.merchant_name,
       mfa: false,
     });
     snack('Signed in');
@@ -1698,6 +1728,10 @@ const ACTIONS = {
       email_verified: me.data?.email_verified,
       is_staff: me.data?.is_staff,
       is_staff_ops: me.data?.is_staff_ops,
+      shop: me.data?.shop,
+      pos: me.data?.pos,
+      merchant_slug: me.data?.merchant_slug,
+      merchant_name: me.data?.merchant_name,
       mfa: true,
     });
     snack('Signed in — mfa_verified is true');
@@ -1716,7 +1750,9 @@ const ACTIONS = {
     await finishLogin(S.tokens, {
       id: me.data?.id, email: me.data?.email, username: me.data?.username,
       display_name: me.data?.username, email_verified: me.data?.email_verified,
-      is_staff: me.data?.is_staff, is_staff_ops: me.data?.is_staff_ops, mfa: true,
+      is_staff: me.data?.is_staff, is_staff_ops: me.data?.is_staff_ops,
+      shop: me.data?.shop, pos: me.data?.pos,
+      merchant_slug: me.data?.merchant_slug, merchant_name: me.data?.merchant_name, mfa: true,
     });
     snack('Backup code accepted');
   }); },
@@ -1968,7 +2004,7 @@ const ACTIONS = {
   },
 
   till(){ withBusy(async () => {
-    if (!S.user || !S.user.is_staff_ops) { snack('Staff sign-in required'); return; }
+    if (!canTill()) { snack('The till is not on this package'); return; }
     const stores = await api('GET', '/api/v1/pos/stores/', { path: '/api/v1/pos/stores/' });
     if (stores.ok) S.pos.stores = stores.data.results || [];
     await loadPosCatalog('');
@@ -2078,9 +2114,20 @@ document.addEventListener('input', e => {
   }
 });
 
+async function loadFace(){
+  if (!SHOP_MERCHANT) {
+    S.face = { slug:'', trading_name:'Northbound', shop:true, pos:true, read_only:false };
+    return;
+  }
+  const path = '/api/v1/platform/shops/' + encodeURIComponent(SHOP_MERCHANT) + '/';
+  const r = await api('GET', path, { path });
+  if (r.ok && r.data) S.face = r.data;
+}
+
 async function boot(){
   render();
   try {
+    await loadFace();
     await api('GET', '/api/v1/app/version-check/', { path: '/api/v1/app/version-check/' });
     await loadProducts();
     await loadMerch();

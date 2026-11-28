@@ -96,6 +96,34 @@ def merchants_on_order(order):
     return seen
 
 
+def shop_profile(slug: str) -> dict | None:
+    """Public face of a shop. No keys, no mail addresses."""
+    from django.conf import settings
+
+    cleaned = (slug or SAMPLE_SLUG).strip().lower() or SAMPLE_SLUG
+    if cleaned == SAMPLE_SLUG:
+        merchant = Merchant.objects.filter(slug=SAMPLE_SLUG).first()
+        name = merchant.trading_name if merchant is not None else ""
+        return {
+            "slug": SAMPLE_SLUG,
+            "trading_name": name or getattr(settings, "REKA_SITE_BRAND_NAME", "Northbound"),
+            "shop": True,
+            "pos": True,
+            "read_only": False,
+        }
+    merchant = Merchant.objects.filter(slug=cleaned).first()
+    if merchant is None:
+        return None
+    flags = selling_features(merchant)
+    return {
+        "slug": merchant.slug,
+        "trading_name": merchant.trading_name,
+        "shop": flags["shop"],
+        "pos": flags["pos"],
+        "read_only": flags["reason"] == "trial_ended",
+    }
+
+
 def shop_is_public(slug: str) -> bool:
     if slug == SAMPLE_SLUG:
         return True

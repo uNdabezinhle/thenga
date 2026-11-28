@@ -9,6 +9,34 @@ import '../models/models.dart';
 
 final apiProvider = Provider<RekaApi>((ref) => RekaApi());
 
+class ShopFace {
+  const ShopFace({
+    required this.tradingName,
+    required this.slug,
+    required this.shop,
+    required this.pos,
+  });
+
+  final String tradingName;
+  final String slug;
+  final bool shop;
+  final bool pos;
+
+  static const northbound = ShopFace(
+    tradingName: 'Northbound',
+    slug: '',
+    shop: true,
+    pos: true,
+  );
+
+  factory ShopFace.fromJson(Map<String, dynamic> json) => ShopFace(
+        tradingName: asString(json['trading_name'], 'Northbound'),
+        slug: asString(json['slug']),
+        shop: json['shop'] as bool? ?? true,
+        pos: json['pos'] as bool? ?? true,
+      );
+}
+
 /// Hosted shop from the web address. Empty means the Northbound sample.
 String shopMerchantSlug() {
   if (!kIsWeb) return '';
@@ -31,6 +59,25 @@ class NbTab {
 }
 
 final shellTabProvider = StateProvider<int>((ref) => NbTab.shop);
+
+final shopFaceProvider = FutureProvider<ShopFace>((ref) async {
+  final slug = shopMerchantSlug();
+  final user = ref.watch(authStateProvider).valueOrNull?.user;
+  if (slug.isEmpty) {
+    if (user != null && user.merchantSlug.isNotEmpty) {
+      return ShopFace(
+        tradingName: user.merchantName.isEmpty ? user.merchantSlug : user.merchantName,
+        slug: user.merchantSlug,
+        shop: user.shop,
+        pos: user.pos,
+      );
+    }
+    return ShopFace.northbound;
+  }
+  final api = ref.watch(apiProvider);
+  final res = await api.dio.get('/api/v1/platform/shops/$slug/');
+  return ShopFace.fromJson(Map<String, dynamic>.from(res.data as Map));
+});
 
 class CatalogueChip {
   const CatalogueChip(this.id, this.label);
@@ -545,7 +592,8 @@ final staffFilterProvider = StateProvider<String>((ref) => '');
 final staffOrdersProvider =
     FutureProvider.autoDispose<List<OrderSummary>>((ref) async {
   final auth = ref.watch(authStateProvider).valueOrNull;
-  if (auth?.user?.isStaffOps != true) return [];
+  final user = auth?.user;
+  if (user == null || (!user.isStaffOps && user.merchantSlug.isEmpty)) return [];
   final api = ref.watch(apiProvider);
   final status = ref.watch(staffFilterProvider);
   final res = await api.dio.get(

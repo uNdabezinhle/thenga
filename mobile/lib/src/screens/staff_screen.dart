@@ -14,7 +14,7 @@ class StaffScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authStateProvider).valueOrNull?.user;
-    if (user == null || !user.isStaffOps) {
+    if (user == null || (!user.isStaffOps && user.merchantSlug.isEmpty)) {
       return const Scaffold(
         body: Center(
           child: Padding(
@@ -71,19 +71,21 @@ class StaffScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ListTile(
-            key: const Key('open-till'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Open till'),
-            subtitle: const Text('Counter sale, scanner, and drawer'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TillScreen()),
-              );
-            },
-          ),
-          ListTile(
+          if (user.pos)
+            ListTile(
+              key: const Key('open-till'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Open till'),
+              subtitle: const Text('Counter sale, scanner, and drawer'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TillScreen()),
+                );
+              },
+            ),
+          if (user.isStaffOps && user.shop)
+            ListTile(
             key: const Key('store-settings'),
             contentPadding: EdgeInsets.zero,
             title: const Text('Store settings'),
@@ -299,21 +301,23 @@ class _StaffOrder extends ConsumerWidget {
               Wrap(
                 spacing: 8,
                 children: [
-                  if (order.status == 'packed')
-                    OutlinedButton(
-                      onPressed: () => _dispatch(context, ref),
-                      child: const Text('Dispatch'),
-                    )
-                  else if (order.status == 'out_for_delivery')
-                    OutlinedButton(
-                      onPressed: () => _courier(context, ref),
-                      child: Text(_courierLabel(order)),
-                    )
-                  else
-                    OutlinedButton(
-                      onPressed: () => _advance(context, ref),
-                      child: const Text('Advance'),
-                    ),
+                  if (ref.watch(authStateProvider).valueOrNull?.user?.shop ?? true) ...[
+                    if (order.status == 'packed')
+                      OutlinedButton(
+                        onPressed: () => _dispatch(context, ref),
+                        child: const Text('Dispatch'),
+                      )
+                    else if (order.status == 'out_for_delivery')
+                      OutlinedButton(
+                        onPressed: () => _courier(context, ref),
+                        child: Text(_courierLabel(order)),
+                      )
+                    else
+                      OutlinedButton(
+                        onPressed: () => _advance(context, ref),
+                        child: const Text('Advance'),
+                      ),
+                  ],
                   OutlinedButton(
                     onPressed: () => _refund(context, ref),
                     child: const Text('Refund'),

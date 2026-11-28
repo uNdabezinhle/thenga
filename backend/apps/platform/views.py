@@ -23,6 +23,7 @@ from .services import (
     merchant_for,
     open_merchant,
     save_payfast,
+    shop_profile,
 )
 
 
@@ -42,6 +43,18 @@ def _priced(rows):
         item.pop("pos", None)
         out.append(item)
     return out
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def shop_face(request, slug):
+    profile = shop_profile(slug)
+    if profile is None:
+        return Response(
+            {"error": {"code": "not_found", "message": "No shop with that address."}},
+            status=404,
+        )
+    return Response(profile)
 
 
 @api_view(["GET"])

@@ -54,14 +54,19 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
 
     final cartCount = ref.watch(cartProvider).valueOrNull?.totalItems ?? 0;
-    final staff = ref.watch(authStateProvider).valueOrNull?.user?.isStaffOps ?? false;
+    final user = ref.watch(authStateProvider).valueOrNull?.user;
+    final face = ref.watch(shopFaceProvider).valueOrNull ?? ShopFace.northbound;
+    final shopOn = shopMerchantSlug().isNotEmpty ? face.shop : (user?.shop ?? face.shop);
+    final operator = user != null && (user.isStaffOps || user.merchantSlug.isNotEmpty);
     final pages = <Widget>[
-      const ShopScreen(),
-      const SearchScreen(),
-      const CartScreen(),
-      const SavedScreen(),
+      if (shopOn) ...[
+        const ShopScreen(),
+        const SearchScreen(),
+        const CartScreen(),
+        const SavedScreen(),
+      ],
       const AccountScreen(),
-      if (staff) const StaffScreen(),
+      if (operator) const StaffScreen(),
     ];
     final index = _index.clamp(0, pages.length - 1);
     final version = ref.watch(appVersionProvider).valueOrNull;
@@ -106,39 +111,43 @@ class _AppShellState extends ConsumerState<AppShell> {
         backgroundColor: Colors.white,
         indicatorColor: NbColors.lime,
         destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront),
-            label: 'Shop',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.search),
-            label: 'Search',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: cartCount > 0,
-              label: Text('$cartCount'),
-              child: const Icon(Icons.shopping_bag_outlined),
+          if (shopOn)
+            const NavigationDestination(
+              icon: Icon(Icons.storefront_outlined),
+              selectedIcon: Icon(Icons.storefront),
+              label: 'Shop',
             ),
-            selectedIcon: Badge(
-              isLabelVisible: cartCount > 0,
-              label: Text('$cartCount'),
-              child: const Icon(Icons.shopping_bag),
+          if (shopOn)
+            const NavigationDestination(
+              icon: Icon(Icons.search),
+              label: 'Search',
             ),
-            label: 'Cart',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.bookmark_border),
-            selectedIcon: Icon(Icons.bookmark),
-            label: 'Saved',
-          ),
+          if (shopOn)
+            NavigationDestination(
+              icon: Badge(
+                isLabelVisible: cartCount > 0,
+                label: Text('$cartCount'),
+                child: const Icon(Icons.shopping_bag_outlined),
+              ),
+              selectedIcon: Badge(
+                isLabelVisible: cartCount > 0,
+                label: Text('$cartCount'),
+                child: const Icon(Icons.shopping_bag),
+              ),
+              label: 'Cart',
+            ),
+          if (shopOn)
+            const NavigationDestination(
+              icon: Icon(Icons.bookmark_border),
+              selectedIcon: Icon(Icons.bookmark),
+              label: 'Saved',
+            ),
           const NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Account',
           ),
-          if (staff)
+          if (operator)
             const NavigationDestination(
               icon: Icon(Icons.layers_outlined),
               selectedIcon: Icon(Icons.layers),
